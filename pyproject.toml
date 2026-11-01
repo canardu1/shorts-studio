@@ -1,0 +1,38 @@
+[project]
+name = "face-reframe"
+version = "0.3.0"
+description = "Shorts Studio: turn long horizontal videos into vertical shorts locally — face-following reframe, auto cuts, captions, cinematic audio, face restoration. Also DaVinci Resolve scripts."
+readme = "README.md"
+license = {text = "GPL-3.0-only"}
+authors = [{name = "Carlo Anardu"}]
+requires-python = ">=3.9"
+keywords = ["shorts", "reels", "tiktok", "reframe", "davinci-resolve", "video-editing", "whisper", "captions"]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+    "Environment :: X11 Applications :: Qt",
+]
+dependencies = ["numpy>=1.20", "opencv-python>=4.8"]
+
+[project.optional-dependencies]
+app = ["PySide6>=6.6", "imageio-ffmpeg", "faster-whisper", "onnxruntime"]
+
+[project.urls]
+Homepage = "https://github.com/canardu1/shorts-studio"
+Issues = "https://github.com/canardu1/shorts-studio/issues"
+
+[project.scripts]
+face-reframe = "face_reframe.cli:main"
+
+[project.gui-scripts]
+face-reframe-app = "face_reframe.app.window:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+face_reframe = ["models/*.onnx"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]

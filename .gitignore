@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.venv-app/
+.venv-build/
+build/
+dist/
+packaging/ShortsStudio.iconset/
+.DS_Store
+*.part
+# local footage and renders
+/*.mp4
+/*.mov
+/*.wav
+*_short*.mp4
+.*_tmp.*
+.*_cmp.*

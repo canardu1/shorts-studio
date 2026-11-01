@@ -1,0 +1,37 @@
+# Shorts Studio — full feature guide
+
+A desktop app (PySide6, Italian UI) on the same engine, no Resolve needed: drop videos in, tune everything on a live preview, get finished shorts out — in batch.
+
+**Start:** double-click `Shorts Studio.command` (first run creates `.venv-app` and installs the deps), or `pip install -e ".[app]"` then `face-reframe-app`. To build a real macOS app: `packaging/build_mac.sh` → `dist/Shorts Studio.app` (ffmpeg and models bundled; unsigned, so right-click → Open the first time).
+
+**Preview**
+- Source with the face-following crop box on the left, the finished vertical frame on the right (punch-in, split screen and captions included).
+- *Analizza volti* once: framing settings then update live; the analysis is cached on disk and reused by the render and on the next launch.
+- **Timeline** under the preview: removed parts in red (pauses, breaths, and — after *Trascrivi* — fillers and retakes), shot changes, hand corrections. *Salta i tagli* plays the result as it will be cut.
+- **Audio:** play uses the source audio as the clock. With cinematic audio or background music on, it plays a treated WAV of the next ~40 s instead (rebuilt in the background ~0.5 s after you change a setting, next window prepared ahead), so you hear the export's sound while tuning; **A/B** switches to the original.
+- **Heavy camera files** (4K, HEVC 10-bit 4:2:2 such as Sony XAVC HS): the app builds a light 540p proxy once (in the background, cached) and plays from it, so skipping cuts doesn't stall on slow decoder seeks; stills and the export use the original.
+- **Who to follow:** thumbnails of everyone in the video, matched across shots with the SFace face-recognition model (colour signature as fallback). Multi-select the thumbnails of the person to follow.
+- **Hand corrections:** drag the yellow box to re-aim the crop from that frame; *Auto da qui* hands control back to the tracker; *Annulla correzioni* clears them.
+
+**Per-video pipeline:** optional clip range → cuts → cinematic audio → reframe per format (9:16 plus optional 4:5 / 1:1 / 16:9 from the same analysis) with punch-in, split screen, enhance and burned captions → background music ducked under the voice. Whisper runs once per file and is cached.
+
+**Options worth knowing**
+- *Segui:* main person (locked per shot) or *Chi parla* (cuts to whoever is talking, from mouth movement). *Layout:* single, or split screen with two people stacked whenever both are in shot (captions move to the seam).
+- *Restauro volti* (tab Qualità): GPEN 256 (fast, ~0.15 s/frame on an M1), GPEN 512, GFPGAN 1.4 or CodeFormer (best, ~5 s/frame). Faces are aligned, restored and pasted back with a feathered mask; *Intensità* mixes it with the original, *Fedeltà* is CodeFormer's identity weight. Models download on first use into `~/Library/Application Support/ShortsStudio/models`. CodeFormer and GPEN are non-commercial licences; GFPGAN is Apache-2.0.
+- *Beauty* (tab Qualità): skin smoothing (edge-preserving, with a little grain kept), blemish removal and wrinkle/under-eye softening, only inside a skin mask built from the face landmarks and the face's own skin colour — eyes, brows, lips, beard and hair stay sharp. ~10-25 ms per face; runs after face restoration.
+- *Pelle* (tab Qualità): measures cheeks and forehead from the face landmarks and, only if the skin is off the natural hue range (e.g. a camera rendering it "lobster red") or over-saturated, rotates it back and trims chroma — with a soft mask on skin-coloured pixels only, so red clothes and backgrounds stay put. Computed once per video; *Salva come LUT .cube…* exports the same correction for Resolve.
+- *Punch-in automatico:* a quick zoom at each new phrase.
+- **Effetti** tab — social camera moves, all drawn from the crop so they cost almost nothing: *camera a mano* (handheld drift), *spinta lenta* (slow push-in per phrase), *crash zoom* on strong words (questions, exclamations, numbers, "mai", "segreto"… or loud peaks without a transcript), *scossone* (impact shake on voice peaks), and cut transitions — *whip pan*, *zoom*, *glitch* or random — on shot changes and jump cuts (all, every other one, or camera changes only), with a minimum gap between effects. Moves are seeded per video, so the export matches the preview.
+- **Sottotitoli… (editor):** fix what Whisper misheard before burning — edit any caption line (timings are re-spread over the new words, so word-by-word highlighting stays in sync), find & replace across the whole video (names, jargon), delete a line, jump the preview to it, restore Whisper's original. Corrections are saved with the transcript, so preview, export and clips all use them.
+- *Sottotitoli parola per parola:* TikTok-style captions with the spoken word highlighted.
+- *Trova i momenti migliori:* proposes the strongest 30–60 s clips of a long video (dense speech, a hook in the first sentence, ends on a full sentence) and adds them to the list as separate shorts.
+- **Testi** tab — *titolo iniziale* (hook) on screen for the first seconds: automatic (first sentence) or your own text per video; closing *CTA* card in the last seconds; *logo/watermark* (PNG, corner, size, opacity). *Lingua sottotitoli:* original, English (Whisper translation, cached) or both stacked.
+- *Look* (tab Qualità): caldo, freddo, cinema, pop, vintage, bianco e nero with strength, plus *bilanciamento automatico* (gray-world white balance + exposure, softened). *Stabilizzazione:* optical-flow camera smoothing per shot, applied through the crop (slight extra zoom), computed once per file and cached.
+- **Safe zones:** the preview can overlay the areas covered by the TikTok / Reels / Shorts buttons and captions (9:16).
+- **Undo/redo** (↶ ↷, ⌘Z / ⇧⌘Z): crop corrections, person choice, subtitle edits, hook text.
+- **Projects:** *Salva progetto… / Apri progetto…* (`.shorts` JSON: videos, clips, picks, corrections, titles, settings). The session is autosaved and offered back at the next launch.
+- **Export extras:** *Copertina* JPG (sharpest frame with a face, with the hook title), *Testi social* TXT (title, description, hashtags from the transcript; also from *Titolo, descrizione e hashtag…*), and *Encoder* hardware (VideoToolbox on the Mac, ~2× faster than x264 "medium") or software.
+- **Copertine…** (under the video list): four click-worthy thumbnails — *Pop* (blurred background), *Colore acceso*, *Primo piano*, *Scuro con alone* — from the sharpest, most expressive frames: person cut out with U²-Net-p (4.6 MB, downloaded once; ~0.3 s per frame on an M1), white outline and shadow, 2-4 big words picked from the hook/transcript (editable, one word in an accent colour). YouTube 16:9 or Shorts 9:16, saved as JPG. With *Copertina* on, the export also writes a `_youtube.jpg`.
+- **Presets:** Intervista, Podcast 2 persone, Podcast split screen, Vlog, PC lento — plus your own (*Salva…*).
+- **Slow machine:** 720×1280 export, "Veloce" encoding, detect every 3rd frame, "Veloce" enhance.
+

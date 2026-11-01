@@ -1,0 +1,28 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: System libraries
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libegl1 libgl1 libxkbcommon0 libpulse0
+      - name: Install
+        run: pip install -e ".[app]" pytest scikit-image
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_AUDIO_BACKEND: pulseaudio
+          SHORTS_NO_RESTORE: "1"
+        run: python -m pytest -q
