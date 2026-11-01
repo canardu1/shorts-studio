@@ -176,7 +176,7 @@ def test_job_with_face_restoration(two_people, tmp_path):
     logs = []
     outs = run_job(path, s, lambda *_: None, logs.append, cache=AnalysisCache(disk=False), clip=(0.0, 1.0))
     assert os.path.exists(outs[0])
-    assert any("Restauro volti gpen256" in l for l in logs), logs
+    assert any("Face restoration gpen256" in l for l in logs), logs
 
 
 def test_job_with_all_moves(two_people, tmp_path):
@@ -186,7 +186,7 @@ def test_job_with_all_moves(two_people, tmp_path):
     s = JobSettings(output_height=640, output_dir=str(tmp_path), motion=m, cut_pauses=True)
     logs = []
     outs = run_job(path, s, lambda *_: None, logs.append, cache=AnalysisCache(disk=False))
-    assert os.path.exists(outs[0]) and any("movimenti" in l for l in logs), logs
+    assert os.path.exists(outs[0]) and any("moves" in l for l in logs), logs
 
 
 def test_job_with_skin_fix(two_people, tmp_path):
@@ -194,7 +194,7 @@ def test_job_with_skin_fix(two_people, tmp_path):
     s = JobSettings(output_height=640, output_dir=str(tmp_path), skin=True)
     logs = []
     outs = run_job(path, s, lambda *_: None, logs.append, cache=AnalysisCache(disk=False), clip=(0.0, 1.0))
-    assert os.path.exists(outs[0]) and any("Pelle:" in l for l in logs), logs
+    assert os.path.exists(outs[0]) and any("Skin:" in l for l in logs), logs
 
 
 def test_job_with_extras(two_people, tmp_path):
@@ -208,4 +208,4 @@ def test_job_with_extras(two_people, tmp_path):
     outs = run_job(path, s, lambda *_: None, logs.append, cache=AnalysisCache(disk=False))
     base = os.path.splitext(outs[0])[0]
     assert os.path.exists(base + "_copertina.jpg") and os.path.exists(base + "_testi.txt"), logs
-    assert any("Colore: look cine" in l for l in logs) and any("encoder: x264" in l for l in logs)
+    assert any("Colour: look cine" in l for l in logs) and any("encoder: x264" in l for l in logs)

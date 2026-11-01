@@ -61,5 +61,5 @@ def test_cube_file(red_face, tmp_path):
 
 def test_natural_skin_left_alone(red_face):
     img, _, faces, o = red_face
-    assert not o.needed and "già naturale" in o.describe()
+    assert not o.needed and "already natural" in o.describe()
     assert skin.apply(img, o) is img

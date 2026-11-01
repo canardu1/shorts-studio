@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
 
 from ..cinematic import CinematicParams
 from ..enhance import EnhanceOptions
+from .. import i18n
+from ..i18n import tr
 from ..pipeline import Options
 from ..silence import SpeechParams
 from ..track import ShotSettings, TrackSettings
@@ -40,27 +42,27 @@ APP_NAME = "Shorts Studio"
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".m4v", ".avi", ".mxf", ".webm", ".mts"}
 AUDIO_EXT = "*.mp3 *.wav *.m4a *.aac *.flac *.ogg"
 ASPECTS = ["9:16", "4:5", "1:1", "16:9"]
-LANGS = [("Automatica", None), ("Italiano", "it"), ("English", "en"), ("Español", "es"),
+LANGS = [("Automatic", None), ("Italiano", "it"), ("English", "en"), ("Español", "es"),
          ("Français", "fr"), ("Deutsch", "de"), ("Português", "pt")]
-ENHANCE = [("Spento", "off"), ("Veloce (nitidezza + volto)", "fast"), ("AI upscale (Real-ESRGAN)", "ai")]
-RESTORE = [("Spento", "off"), ("GPEN 256 — veloce (~0,15 s/fot.)", "gpen256"),
-           ("GPEN 512 — dettagliato (~1,8 s/fot.)", "gpen512"),
-           ("GFPGAN 1.4 — uso commerciale ok (~2 s/fot.)", "gfpgan"),
-           ("CodeFormer — qualità massima (~5 s/fot.)", "codeformer")]
-SUBS = [("Nessuno", "off"), ("Solo file .srt", "srt"), ("Impressi nel video + .srt", "burn")]
-X264 = [("Veloce", "veryfast"), ("Bilanciato", "fast"), ("Qualità", "medium")]
-RES = [("1080 × 1920", 1920), ("720 × 1280 (PC lento)", 1280)]
-COLORS = [("Bianco", "#FFFFFF"), ("Giallo", "#FFD400"), ("Verde", "#7CFF6B"), ("Ciano", "#4FD8FF"),
-          ("Rosa", "#FF5DA2")]
-DUCK = [("Leggero", 3.0), ("Medio", 6.0), ("Forte", 12.0)]
+ENHANCE = [("Off", "off"), ("Fast (sharpening + face)", "fast"), ("AI upscale (Real-ESRGAN)", "ai")]
+RESTORE = [("Off", "off"), ("GPEN 256 — fast (~0.15 s/frame)", "gpen256"),
+           ("GPEN 512 — detailed (~1.8 s/frame)", "gpen512"),
+           ("GFPGAN 1.4 — commercial use ok (~2 s/frame)", "gfpgan"),
+           ("CodeFormer — max quality (~5 s/frame)", "codeformer")]
+SUBS = [("None", "off"), (".srt file only", "srt"), ("Burned into video + .srt", "burn")]
+X264 = [("Fast", "veryfast"), ("Balanced", "fast"), ("Quality", "medium")]
+RES = [("1080 × 1920", 1920), ("720 × 1280 (slow PC)", 1280)]
+COLORS = [("White", "#FFFFFF"), ("Yellow", "#FFD400"), ("Green", "#7CFF6B"), ("Cyan", "#4FD8FF"),
+          ("Pink", "#FF5DA2")]
+DUCK = [("Light", 3.0), ("Medium", 6.0), ("Strong", 12.0)]
 # areas covered by each app's buttons/captions on a 9:16 frame (x, y, w, h fractions)
 SAFE_ZONES = {
     "tiktok": [(0.0, 0.0, 1.0, 0.09), (0.85, 0.38, 0.15, 0.48), (0.0, 0.80, 0.85, 0.20)],
     "reels": [(0.0, 0.0, 1.0, 0.08), (0.86, 0.45, 0.14, 0.43), (0.0, 0.82, 0.86, 0.18)],
     "shorts": [(0.0, 0.0, 1.0, 0.07), (0.86, 0.42, 0.14, 0.44), (0.0, 0.80, 0.86, 0.20)],
 }
-TRANSITIONS = [("Nessuna", "off"), ("Whip pan", "whip"), ("Zoom", "zoom"), ("Glitch", "glitch"),
-               ("Casuale", "random")]
+TRANSITIONS = [("None", "off"), ("Whip pan", "whip"), ("Zoom", "zoom"), ("Glitch", "glitch"),
+               ("Random", "random")]
 
 
 # ------------------------------------------------------------------ workers
@@ -139,7 +141,7 @@ class BatchWorker(QObject):
                                thumb_renderer=self.thumb_renderer)
                 self.file_done.emit(i, True, outs)
             except Cancelled:
-                self.file_done.emit(i, False, "annullato")
+                self.file_done.emit(i, False, tr("cancelled"))
                 break
             except Exception as exc:
                 self.log.emit(traceback.format_exc())
@@ -176,9 +178,9 @@ def combo(items):
     w.setMinimumContentsLength(14)
     for it in items:
         if isinstance(it, tuple):
-            w.addItem(it[0], it[1])
+            w.addItem(tr(it[0]), it[1])
         else:
-            w.addItem(it, it)
+            w.addItem(tr(it), it)
     return w
 
 
@@ -304,43 +306,42 @@ class MainWindow(QMainWindow):
         self.queue.currentItemChanged.connect(self._select)
         self.queue.itemDoubleClicked.connect(self._open_output)
         lay.addWidget(self.queue, 1)
-        self.drop_hint = hint("Trascina qui video o cartelle, oppure usa “Aggiungi”.")
+        self.drop_hint = hint(tr("Drop videos or folders here, or use “Add”."))
         lay.addWidget(self.drop_hint)
         row = QHBoxLayout()
-        add = QPushButton("Aggiungi…")
+        add = QPushButton(tr("Add…"))
         add.clicked.connect(self._add_dialog)
-        addd = QPushButton("Cartella…")
+        addd = QPushButton(tr("Folder…"))
         addd.clicked.connect(self._add_folder)
-        rem = QPushButton("Rimuovi")
+        rem = QPushButton(tr("Remove"))
         rem.clicked.connect(self._remove_selected)
         row.addWidget(add)
         row.addWidget(addd)
         row.addWidget(rem)
         lay.addLayout(row)
-        self.hl_btn = QPushButton("Trova i momenti migliori")
-        self.hl_btn.setToolTip("Propone le clip da 30–60 s più forti del video selezionato "
-                               "e le aggiunge alla lista come short separati")
+        self.hl_btn = QPushButton(tr("Find the best moments"))
+        self.hl_btn.setToolTip(tr("Suggests the strongest 30–60 s clips of the selected video and adds them to the list as separate shorts"))
         self.hl_btn.clicked.connect(self._find_highlights)
         hl_row = QHBoxLayout()
         self.hl_count = ispin(1, 10, 4)
-        self.hl_count.setToolTip("Quante clip proporre")
+        self.hl_count.setToolTip(tr("How many clips to suggest"))
         hl_row.addWidget(self.hl_btn, 1)
         hl_row.addWidget(self.hl_count)
         lay.addLayout(hl_row)
         prow = QHBoxLayout()
-        po = QPushButton("Apri progetto…")
+        po = QPushButton(tr("Open project…"))
         po.clicked.connect(self._open_project)
-        ps = QPushButton("Salva progetto…")
+        ps = QPushButton(tr("Save project…"))
         ps.clicked.connect(self._save_project)
         prow.addWidget(po)
         prow.addWidget(ps)
         lay.addLayout(prow)
         srow = QHBoxLayout()
-        soc = QPushButton("Titolo, descrizione e hashtag…")
+        soc = QPushButton(tr("Title, description & hashtags…"))
         soc.clicked.connect(self._show_social)
         srow.addWidget(soc)
-        thb = QPushButton("Copertine…")
-        thb.setToolTip("Copertine cliccabili per YouTube (16:9) e Shorts (9:16) dai fotogrammi migliori")
+        thb = QPushButton(tr("Thumbnails…"))
+        thb.setToolTip(tr("Click-worthy thumbnails for YouTube (16:9) and Shorts (9:16) from the best frames"))
         thb.clicked.connect(self._open_thumbs)
         srow.addWidget(thb)
         lay.addLayout(srow)
@@ -351,9 +352,9 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(box)
         lay.setContentsMargins(4, 10, 4, 6)
         views = QSplitter(Qt.Horizontal)
-        self.src_view = FrameView("Seleziona un video per l'anteprima", draggable=True)
+        self.src_view = FrameView(tr("Select a video to preview"), draggable=True)
         self.src_view.crop_dragged.connect(self._crop_dragged)
-        self.out_view = FrameView("Anteprima verticale\n\nPremi “Analizza volti”")
+        self.out_view = FrameView(tr("Vertical preview\n\nPress “Analyze faces”"))
         views.addWidget(self.src_view)
         views.addWidget(self.out_view)
         views.setSizes([560, 280])
@@ -372,18 +373,17 @@ class MainWindow(QMainWindow):
         self.slider.sliderReleased.connect(self._refresh_frame)
         self.mute_btn = QToolButton()
         self.mute_btn.setIcon(self.style().standardIcon(QStyle.SP_MediaVolume))
-        self.mute_btn.setToolTip("Audio dell'anteprima on/off")
+        self.mute_btn.setToolTip(tr("Preview audio on/off"))
         self.mute_btn.clicked.connect(self._toggle_mute)
         self.ab_btn = QToolButton()
         self.ab_btn.setText("A/B")
         self.ab_btn.setCheckable(True)
-        self.ab_btn.setToolTip("Premuto: ascolti l'audio originale. Rilasciato: l'audio come uscirà "
-                               "(audio cinematico e musica, se attivi)")
+        self.ab_btn.setToolTip(tr("Held: you hear the original audio. Released: the audio as it will be exported (cinematic audio and music, if on)"))
         self.ab_btn.toggled.connect(self._ab_toggled)
         self.time_lab = QLabel("00:00 / 00:00")
         self.time_lab.setMinimumWidth(110)
-        self.skip_cuts = QCheckBox("Salta i tagli")
-        self.skip_cuts.setToolTip("In riproduzione salta le parti che verranno tagliate (in rosso)")
+        self.skip_cuts = QCheckBox(tr("Skip cuts"))
+        self.skip_cuts.setToolTip(tr("While playing, skip the parts that will be cut (in red)"))
         self.skip_cuts.setChecked(True)
         ctl.addWidget(self.play_btn)
         ctl.addWidget(self.slider, 1)
@@ -394,31 +394,30 @@ class MainWindow(QMainWindow):
         lay.addLayout(ctl)
 
         row = QHBoxLayout()
-        self.analyze_btn = QPushButton("Analizza volti")
+        self.analyze_btn = QPushButton(tr("Analyze faces"))
         self.analyze_btn.setObjectName("accent")
         self.analyze_btn.clicked.connect(self._analyze)
-        self.tr_btn = QPushButton("Trascrivi")
-        self.tr_btn.setToolTip("Whisper: serve per vedere filler, ripetizioni e sottotitoli "
-                               "nell'anteprima (il risultato viene riusato dal render)")
+        self.tr_btn = QPushButton(tr("Transcribe"))
+        self.tr_btn.setToolTip(tr("Whisper: needed to see fillers, retakes and captions in the preview (the result is reused by the render)"))
         self.tr_btn.clicked.connect(self._transcribe)
-        self.sub_btn = QPushButton("Sottotitoli…")
-        self.sub_btn.setToolTip("Correggi il testo dei sottotitoli prima di imprimerli nel video")
+        self.sub_btn = QPushButton(tr("Captions…"))
+        self.sub_btn.setToolTip(tr("Fix the caption text before burning it into the video"))
         self.sub_btn.clicked.connect(self._open_subeditor)
-        self.enh_preview = QCheckBox("Miglioramento")
-        self.enh_preview.setToolTip("Mostra il miglioramento immagine nell'anteprima verticale")
+        self.enh_preview = QCheckBox(tr("Enhancement"))
+        self.enh_preview.setToolTip(tr("Show the image enhancement in the vertical preview"))
         self.enh_preview.toggled.connect(self._refresh_frame)
-        self.auto_btn = QPushButton("Auto da qui")
-        self.auto_btn.setToolTip("Da questo frame il crop torna a seguire il volto da solo")
+        self.auto_btn = QPushButton(tr("Auto from here"))
+        self.auto_btn.setToolTip(tr("From this frame on, the crop follows the face by itself again"))
         self.auto_btn.clicked.connect(self._manual_auto_here)
-        self.clear_man_btn = QPushButton("Annulla correzioni")
+        self.clear_man_btn = QPushButton(tr("Clear corrections"))
         self.clear_man_btn.clicked.connect(self._manual_clear)
         row.addWidget(self.analyze_btn)
         row.addWidget(self.tr_btn)
         row.addWidget(self.sub_btn)
         row.addWidget(self.enh_preview)
-        self.zones_box = combo([("Zone sicure: no", None), ("TikTok", "tiktok"), ("Reels", "reels"),
+        self.zones_box = combo([(tr("Safe zones: off"), None), ("TikTok", "tiktok"), ("Reels", "reels"),
                                 ("Shorts", "shorts")])
-        self.zones_box.setToolTip("Mostra le aree coperte dall'interfaccia della piattaforma")
+        self.zones_box.setToolTip(tr("Show the areas covered by the platform's interface"))
         self.zones_box.currentIndexChanged.connect(self._refresh_frame)
         row.addWidget(self.zones_box)
         row.addStretch(1)
@@ -426,11 +425,11 @@ class MainWindow(QMainWindow):
         row.addWidget(self.clear_man_btn)
         self.undo_btn = QToolButton()
         self.undo_btn.setText("↶")
-        self.undo_btn.setToolTip("Annulla (⌘Z): correzioni del crop, persone, sottotitoli, titolo")
+        self.undo_btn.setToolTip(tr("Undo (⌘Z): crop corrections, people, captions, title"))
         self.undo_btn.clicked.connect(self._undo_action)
         self.redo_btn = QToolButton()
         self.redo_btn.setText("↷")
-        self.redo_btn.setToolTip("Ripeti (⇧⌘Z)")
+        self.redo_btn.setToolTip(tr("Redo (⇧⌘Z)"))
         self.redo_btn.clicked.connect(self._redo_action)
         row.addWidget(self.undo_btn)
         row.addWidget(self.redo_btn)
@@ -445,7 +444,7 @@ class MainWindow(QMainWindow):
         pl = QHBoxLayout(self.people_bar)
         pl.setContentsMargins(0, 2, 0, 0)
         pl.setSpacing(6)
-        lab = QLabel("Chi seguire:")
+        lab = QLabel(tr("Who to follow:"))
         lab.setObjectName("hint")
         pl.addWidget(lab)
         self.people_group = QButtonGroup(self)
@@ -466,9 +465,9 @@ class MainWindow(QMainWindow):
         self.preset_box = QComboBox()
         self.preset_box.setMinimumWidth(150)
         self.preset_box.activated.connect(self._apply_preset)
-        save = QPushButton("Salva…")
+        save = QPushButton(tr("Save…"))
         save.clicked.connect(self._save_preset)
-        dele = QPushButton("Elimina")
+        dele = QPushButton(tr("Delete"))
         dele.clicked.connect(self._delete_preset)
         prow.addWidget(self.preset_box, 1)
         prow.addWidget(save)
@@ -484,72 +483,68 @@ class MainWindow(QMainWindow):
         # --- framing
         f = QFormLayout()
         W["aspect"] = combo(ASPECTS)
-        W["subject"] = combo([("Persona principale", "main"), ("Chi parla", "speaker")])
-        W["layout"] = combo([("Una persona", "single"), ("Split 2 persone (sopra/sotto)", "split")])
+        W["subject"] = combo([(tr("Main person"), "main"), (tr("Whoever speaks"), "speaker")])
+        W["layout"] = combo([(tr("One person"), "single"), (tr("Split 2 people (top/bottom)"), "split")])
         W["smoothing"] = dspin(0, 3, 0.1, 0.5, 1, " s")
         W["dead_zone"] = dspin(0, 0.5, 0.01, 0.05)
         W["max_speed"] = dspin(0, 5, 0.1, 0.6, 1)
         W["zoom"] = dspin(1, 3, 0.05, 1.0, 2, "×")
-        W["follow_vertical"] = QCheckBox("Segui il volto anche in verticale")
+        W["follow_vertical"] = QCheckBox(tr("Follow the face vertically too"))
         W["face_pos"] = dspin(0.2, 0.5, 0.01, 0.4)
-        W["punch"] = QCheckBox("Punch-in automatico sulle frasi")
+        W["punch"] = QCheckBox(tr("Auto punch-in on phrases"))
         W["punch_zoom"] = dspin(1.02, 1.5, 0.01, 1.15, 2, "×")
-        W["wide_mode"] = combo([("Zoom sul soggetto", "zoom"), ("Altezza piena", "keep")])
+        W["wide_mode"] = combo([(tr("Zoom on subject"), "zoom"), (tr("Full height"), "keep")])
         W["wide_threshold"] = dspin(0.02, 0.5, 0.01, 0.12)
         W["max_zoom"] = dspin(1, 4, 0.1, 2.0, 1, "×")
-        W["stride"] = combo([("Ogni frame (lento)", 1), ("Ogni 2 frame", 2), ("Ogni 3 frame (veloce)", 3)])
+        W["stride"] = combo([(tr("Every frame (slow)"), 1), (tr("Every 2 frames"), 2), (tr("Every 3 frames (fast)"), 3)])
         W["stride"].setCurrentIndex(1)
-        f.addRow("Formato", W["aspect"])
-        f.addRow("Segui", W["subject"])
-        f.addRow("Layout", W["layout"])
-        f.addRow("Fluidità", W["smoothing"])
-        f.addRow("Zona morta", W["dead_zone"])
-        f.addRow("Velocità pan max", W["max_speed"])
+        f.addRow(tr("Aspect"), W["aspect"])
+        f.addRow(tr("Follow"), W["subject"])
+        f.addRow(tr("Layout"), W["layout"])
+        f.addRow(tr("Smoothing"), W["smoothing"])
+        f.addRow(tr("Dead zone"), W["dead_zone"])
+        f.addRow(tr("Max pan speed"), W["max_speed"])
         f.addRow("Zoom", W["zoom"])
         f.addRow(W["follow_vertical"])
-        f.addRow("Altezza volto", W["face_pos"])
+        f.addRow(tr("Face height"), W["face_pos"])
         f.addRow(W["punch"])
-        f.addRow("Zoom punch-in", W["punch_zoom"])
-        f.addRow("Piani larghi", W["wide_mode"])
-        f.addRow("Largo se volto <", W["wide_threshold"])
-        f.addRow("Zoom max larghi", W["max_zoom"])
-        f.addRow("Rilevamento", W["stride"])
-        f.addRow(hint("Trascina il riquadro giallo nell'anteprima per correggere il crop da quel "
-                      "punto. Sotto l'anteprima scegli chi seguire (seleziona tutte le miniature "
-                      "della stessa persona). “Chi parla” stacca su chi sta parlando."))
+        f.addRow(tr("Punch-in zoom"), W["punch_zoom"])
+        f.addRow(tr("Wide shots"), W["wide_mode"])
+        f.addRow(tr("Wide when face <"), W["wide_threshold"])
+        f.addRow(tr("Max wide zoom"), W["max_zoom"])
+        f.addRow(tr("Detection"), W["stride"])
+        f.addRow(hint(tr("Drag the yellow box in the preview to correct the crop from that point on. Below the preview, pick who to follow (select every thumbnail of the same person). “Whoever speaks” cuts to who is talking.")))
         tabs.addTab(self._page(f), "Crop")
 
         # --- cuts
         f = QFormLayout()
-        W["cut_pauses"] = QCheckBox("Taglia le pause")
+        W["cut_pauses"] = QCheckBox(tr("Cut pauses"))
         W["min_pause"] = dspin(0.1, 3, 0.05, 0.35, 2, " s")
         W["padding"] = dspin(0, 0.5, 0.01, 0.16, 2, " s")
         W["margin_db"] = dspin(3, 20, 0.5, 8.0, 1, " dB")
-        W["cut_breaths"] = QCheckBox("Taglia i respiri")
-        W["cut_fillers"] = QCheckBox("Taglia ehm / uhm  (Whisper)")
-        W["cut_retakes"] = QCheckBox("Tieni solo l'ultima ripetizione  (Whisper)")
+        W["cut_breaths"] = QCheckBox(tr("Cut breaths"))
+        W["cut_fillers"] = QCheckBox(tr("Cut ums / uhs  (Whisper)"))
+        W["cut_retakes"] = QCheckBox(tr("Keep only the last retake  (Whisper)"))
         f.addRow(W["cut_pauses"])
-        f.addRow("Pausa minima", W["min_pause"])
-        f.addRow("Margine attorno", W["padding"])
-        f.addRow("Soglia voce", W["margin_db"])
+        f.addRow(tr("Min pause"), W["min_pause"])
+        f.addRow(tr("Padding"), W["padding"])
+        f.addRow(tr("Voice threshold"), W["margin_db"])
         f.addRow(W["cut_breaths"])
         f.addRow(W["cut_fillers"])
         f.addRow(W["cut_retakes"])
-        f.addRow(hint("Le parti tagliate sono in rosso sulla timeline. Filler e ripetizioni "
-                      "compaiono dopo “Trascrivi”. Whisper gira una volta per video e il "
-                      "risultato resta in cache."))
-        tabs.addTab(self._page(f), "Tagli")
+        f.addRow(hint(tr("Cut parts are red on the timeline. Fillers and retakes appear after “Transcribe”. Whisper runs once per video and the result stays cached.")))
+        tabs.addTab(self._page(f), tr("Cuts"))
 
         # --- audio
         f = QFormLayout()
-        W["cinematic"] = QCheckBox("Audio cinematico")
+        W["cinematic"] = QCheckBox(tr("Cinematic audio"))
         W["denoise"] = dspin(0, 40, 1, 12, 0, " dB")
         W["dereverb"] = dspin(0, 30, 1, 12, 0, " dB")
         W["warmth"] = dspin(-6, 6, 0.1, 1.6, 1, " dB")
         W["presence"] = dspin(-6, 6, 0.1, 2.2, 1, " dB")
         W["air"] = dspin(-6, 6, 0.1, 1.2, 1, " dB")
         self.music_edit = QLineEdit()
-        self.music_edit.setPlaceholderText("Nessuna musica")
+        self.music_edit.setPlaceholderText(tr("No music"))
         self.music_edit.setReadOnly(True)
         mb = QPushButton("…")
         mb.setFixedWidth(32)
@@ -565,17 +560,16 @@ class MainWindow(QMainWindow):
         W["duck"] = combo(DUCK)
         W["duck"].setCurrentIndex(1)
         f.addRow(W["cinematic"])
-        f.addRow("Riduzione rumore", W["denoise"])
-        f.addRow("Riduzione riverbero", W["dereverb"])
-        f.addRow("Calore", W["warmth"])
-        f.addRow("Presenza", W["presence"])
-        f.addRow("Aria", W["air"])
-        f.addRow(hint("Denoise, de-esser, compressione, EQ e loudness a −14 LUFS."))
-        f.addRow("Musica di sottofondo", mrow)
-        f.addRow("Volume musica", W["music_db"])
-        f.addRow("Abbassa sotto la voce", W["duck"])
-        f.addRow(hint("La musica va in loop per tutta la durata e si abbassa da sola quando "
-                      "qualcuno parla."))
+        f.addRow(tr("Noise reduction"), W["denoise"])
+        f.addRow(tr("De-reverb"), W["dereverb"])
+        f.addRow(tr("Warmth"), W["warmth"])
+        f.addRow(tr("Presence"), W["presence"])
+        f.addRow(tr("Air"), W["air"])
+        f.addRow(hint(tr("Denoise, de-esser, compression, EQ and loudness at −14 LUFS.")))
+        f.addRow(tr("Background music"), mrow)
+        f.addRow(tr("Music volume"), W["music_db"])
+        f.addRow(tr("Duck under voice"), W["duck"])
+        f.addRow(hint(tr("The music loops for the whole duration and ducks by itself when someone talks.")))
         tabs.addTab(self._page(f), "Audio")
 
         # --- image
@@ -586,104 +580,89 @@ class MainWindow(QMainWindow):
         W["enhance"] = combo(ENHANCE)
         W["sharpen"] = dspin(0, 2, 0.05, 0.5)
         W["face_boost"] = dspin(0, 2, 0.05, 0.35)
-        f.addRow(QLabel("<b>Restauro volti</b>"))
-        f.addRow("Modello", W["restore"])
-        f.addRow("Intensità", W["restore_blend"])
-        f.addRow("Fedeltà (CodeFormer)", W["restore_fidelity"])
-        f.addRow(hint("Ricostruisce il volto (occhi, pelle, denti) e lo rimette nel fotogramma con "
-                      "i bordi sfumati. Tempi per volto e per fotogramma su un M1: 1 minuto di short "
-                      "≈ 4 min con GPEN 256, ≈ 2 ore con CodeFormer. Fedeltà alta = più simile "
-                      "all'originale. Il primo uso scarica il modello (75–380 MB). CodeFormer e "
-                      "GPEN sono gratuiti solo per uso non commerciale; GFPGAN anche per lavoro. "
-                      "Nell'anteprima si vede con “Miglioramento” attivo, a video fermo."))
-        W["skin"] = QCheckBox("Normalizza il colore della pelle")
+        f.addRow(QLabel("<b>%s</b>" % tr("Face restoration")))
+        f.addRow(tr("Model"), W["restore"])
+        f.addRow(tr("Strength"), W["restore_blend"])
+        f.addRow(tr("Fidelity (CodeFormer)"), W["restore_fidelity"])
+        f.addRow(hint(tr("Rebuilds the face (eyes, skin, teeth) and blends it back into the frame with feathered edges. Time per face per frame on an M1: 1 minute of short ≈ 4 min with GPEN 256, ≈ 2 hours with CodeFormer. High fidelity = closer to the original. The first run downloads the model (75–380 MB). CodeFormer and GPEN are free for non-commercial use only; GFPGAN is fine for work. Preview it with “Enhancement” on, on a paused frame.")))
+        W["skin"] = QCheckBox(tr("Normalize skin color"))
         W["skin_strength"] = dspin(0.0, 1.0, 0.05, 0.7)
         self.skin_lab = hint("")
-        cube = QPushButton("Salva come LUT .cube…")
-        cube.setToolTip("La stessa correzione come LUT 3D, da usare in DaVinci Resolve")
+        cube = QPushButton(tr("Save as .cube LUT…"))
+        cube.setToolTip(tr("The same correction as a 3D LUT, for DaVinci Resolve"))
         cube.clicked.connect(self._save_skin_cube)
-        W["beauty"] = QCheckBox("Beauty sul volto")
+        W["beauty"] = QCheckBox(tr("Face beauty"))
         W["beauty_smooth"] = dspin(0, 1, 0.05, 0.5)
         W["beauty_blemish"] = dspin(0, 1, 0.05, 0.5)
         W["beauty_wrinkles"] = dspin(0, 1, 0.05, 0.4)
         f.addRow(QLabel("<b>Beauty</b>"))
         f.addRow(W["beauty"])
-        f.addRow("Levigatura pelle", W["beauty_smooth"])
-        f.addRow("Macchie e brufoli", W["beauty_blemish"])
-        f.addRow("Rughe e occhiaie", W["beauty_wrinkles"])
-        f.addRow(hint("Solo sulla pelle del viso: occhi, sopracciglia, labbra, barba e capelli restano "
-                      "nitidi. Levigatura che conserva un po' di grana (niente effetto plastica), "
-                      "macchie sostituite dalla pelle attorno, rughe attenuate e occhiaie schiarite. "
-                      "Costo ~10–25 ms per volto."))
-        f.addRow(QLabel("<b>Pelle</b>"))
+        f.addRow(tr("Skin smoothing"), W["beauty_smooth"])
+        f.addRow(tr("Spots and blemishes"), W["beauty_blemish"])
+        f.addRow(tr("Wrinkles and eye bags"), W["beauty_wrinkles"])
+        f.addRow(hint(tr("Only on face skin: eyes, eyebrows, lips, beard and hair stay sharp. Smoothing that keeps some grain (no plastic look), spots replaced by the skin around them, wrinkles softened and eye bags lightened. ~10–25 ms per face.")))
+        f.addRow(QLabel("<b>%s</b>" % tr("Skin")))
         f.addRow(W["skin"])
-        f.addRow("Intensità ", W["skin_strength"])
+        f.addRow(tr("Strength"), W["skin_strength"])
         f.addRow(self.skin_lab)
         f.addRow(cube)
-        f.addRow(hint("Misura guance e fronte, poi riporta la tinta sulla linea naturale della pelle "
-                      "e toglie la saturazione in eccesso, solo sui colori della pelle: vestiti "
-                      "rossi e sfondo restano com'erano. Utile per camere che fanno la pelle troppo rossa."))
+        f.addRow(hint(tr("Measures cheeks and forehead, then pulls the tint back to the natural skin line and removes excess saturation, only on skin colours: red clothes and background stay as they were. Useful for cameras that make skin too red.")))
         from .look import LOOKS
         W["look"] = combo(LOOKS)
         W["look_strength"] = dspin(0, 1, 0.05, 1.0)
-        W["auto_wb"] = QCheckBox("Bilanciamento bianco ed esposizione automatici")
-        W["stabilize"] = QCheckBox("Stabilizza le riprese mosse")
+        W["auto_wb"] = QCheckBox(tr("Auto white balance & exposure"))
+        W["stabilize"] = QCheckBox(tr("Stabilize shaky footage"))
         W["stab_amount"] = dspin(0.1, 1.0, 0.05, 0.8)
         f.addRow(QLabel("<b>Colore</b>"))
-        f.addRow("Look", W["look"])
-        f.addRow("Intensità look", W["look_strength"])
+        f.addRow(tr("Look"), W["look"])
+        f.addRow(tr("Look strength"), W["look_strength"])
         f.addRow(W["auto_wb"])
-        f.addRow(hint("Il bilanciamento automatico pareggia colore ed esposizione: utile per avere "
-                      "short della stessa serie con lo stesso aspetto."))
-        f.addRow(QLabel("<b>Stabilizzazione</b>"))
+        f.addRow(hint(tr("Auto balance evens out colour and exposure: handy to give shorts of the same series the same look.")))
+        f.addRow(QLabel("<b>%s</b>" % tr("Stabilization")))
         f.addRow(W["stabilize"])
-        f.addRow("Intensità ", W["stab_amount"])
-        f.addRow(hint("Misura il tremolio della camera e lo compensa spostando il ritaglio (più una "
-                      "leggera rotazione). La prima volta analizza tutto il video."))
+        f.addRow(tr("Strength"), W["stab_amount"])
+        f.addRow(hint(tr("Measures camera shake and compensates by shifting the crop (plus a slight rotation). The first run analyses the whole video.")))
         f.addRow(QLabel("<b>Nitidezza e upscale</b>"))
-        f.addRow("Miglioramento", W["enhance"])
-        f.addRow("Nitidezza", W["sharpen"])
-        f.addRow("Extra sul volto", W["face_boost"])
-        f.addRow(hint("Lavora solo sul ritaglio verticale. “Veloce” costa quasi zero."))
-        tabs.addTab(self._page(f), "Qualità")
+        f.addRow(tr("Enhancement"), W["enhance"])
+        f.addRow(tr("Sharpening"), W["sharpen"])
+        f.addRow(tr("Extra on face"), W["face_boost"])
+        f.addRow(hint(tr("Works only on the vertical crop. “Fast” costs almost nothing.")))
+        tabs.addTab(self._page(f), tr("Quality"))
 
         # --- social moves
         f = QFormLayout()
-        W["mv_handheld"] = QCheckBox("Camera a mano")
+        W["mv_handheld"] = QCheckBox(tr("Handheld camera"))
         W["mv_handheld_amount"] = dspin(0, 1, 0.05, 0.4)
-        W["mv_push"] = QCheckBox("Spinta lenta su ogni frase")
+        W["mv_push"] = QCheckBox(tr("Slow push on every phrase"))
         W["mv_push_amount"] = dspin(0, 1, 0.05, 0.5)
-        W["mv_crash"] = QCheckBox("Crash zoom sulle parole forti")
+        W["mv_crash"] = QCheckBox(tr("Crash zoom on strong words"))
         W["mv_crash_amount"] = dspin(0, 1, 0.05, 0.5)
-        W["mv_shake"] = QCheckBox("Scossone sui picchi di voce")
+        W["mv_shake"] = QCheckBox(tr("Shake on voice peaks"))
         W["mv_shake_amount"] = dspin(0, 1, 0.05, 0.5)
         W["mv_transition"] = combo(TRANSITIONS)
-        W["mv_every"] = combo([("Tutti i tagli", "all"), ("Uno sì e uno no", "alternate"),
-                               ("Solo cambi d'inquadratura", "shots")])
+        W["mv_every"] = combo([(tr("Every cut"), "all"), (tr("Every other one"), "alternate"),
+                               (tr("Only shot changes"), "shots")])
         W["mv_gap"] = dspin(0.5, 10, 0.5, 1.5, 1, " s")
-        f.addRow(QLabel("<b>Movimenti di camera</b>"))
+        f.addRow(QLabel("<b>%s</b>" % tr("Camera moves")))
         f.addRow(W["mv_handheld"])
-        f.addRow("Intensità", W["mv_handheld_amount"])
+        f.addRow(tr("Strength"), W["mv_handheld_amount"])
         f.addRow(W["mv_push"])
-        f.addRow("Intensità ", W["mv_push_amount"])
+        f.addRow(tr("Strength"), W["mv_push_amount"])
         f.addRow(W["mv_crash"])
-        f.addRow("Intensità  ", W["mv_crash_amount"])
+        f.addRow(tr("Strength"), W["mv_crash_amount"])
         f.addRow(W["mv_shake"])
-        f.addRow("Intensità   ", W["mv_shake_amount"])
-        f.addRow(QLabel("<b>Transizioni sui tagli</b>"))
-        f.addRow("Effetto", W["mv_transition"])
-        f.addRow("Quando", W["mv_every"])
-        f.addRow("Distanza minima", W["mv_gap"])
-        f.addRow(hint("Il crash zoom usa le parole forti della trascrizione (domande, esclamazioni, "
-                      "numeri, “mai”, “segreto”…) o, senza trascrizione, i picchi di voce. I tagli "
-                      "sono gli stacchi d'inquadratura e i tagli delle pause. Tutto si vede "
-                      "nell'anteprima in play; costo in export quasi nullo."))
-        tabs.addTab(self._page(f), "Effetti")
+        f.addRow(tr("Strength"), W["mv_shake_amount"])
+        f.addRow(QLabel("<b>%s</b>" % tr("Cut transitions")))
+        f.addRow(tr("Effect"), W["mv_transition"])
+        f.addRow(tr("When"), W["mv_every"])
+        f.addRow(tr("Min distance"), W["mv_gap"])
+        f.addRow(hint(tr("Crash zoom uses the transcript's strong words (questions, exclamations, numbers, “never”, “secret”…) or, without a transcript, voice peaks. Cuts are the shot changes and the pause cuts. Everything is previewed in play; export cost is nearly zero.")))
+        tabs.addTab(self._page(f), tr("Effects"))
 
         # --- subtitles
         f = QFormLayout()
         W["subtitles"] = combo(SUBS)
-        W["caption_style"] = combo([("Parola per parola", "word"), ("Riga intera", "line")])
+        W["caption_style"] = combo([(tr("Word by word"), "word"), (tr("Whole line"), "line")])
         W["language"] = combo(LANGS)
         W["caption_words"] = ispin(1, 8, 3)
         W["caption_max_dur"] = dspin(0.5, 5, 0.1, 1.6, 1, " s")
@@ -691,34 +670,34 @@ class MainWindow(QMainWindow):
         W["caption_color"] = combo(COLORS)
         W["caption_hl"] = combo(COLORS)
         W["caption_hl"].setCurrentIndex(1)
-        W["caption_upper"] = QCheckBox("Maiuscolo")
+        W["caption_upper"] = QCheckBox(tr("UPPERCASE"))
         W["caption_upper"].setChecked(True)
-        f.addRow("Sottotitoli", W["subtitles"])
-        f.addRow("Stile", W["caption_style"])
-        f.addRow("Lingua", W["language"])
-        f.addRow("Parole per riga", W["caption_words"])
-        f.addRow("Durata max riga", W["caption_max_dur"])
-        f.addRow("Posizione verticale", W["caption_pos"])
-        f.addRow("Colore testo", W["caption_color"])
-        f.addRow("Colore parola attiva", W["caption_hl"])
+        f.addRow(tr("Captions"), W["subtitles"])
+        f.addRow(tr("Style"), W["caption_style"])
+        f.addRow(tr("Language"), W["language"])
+        f.addRow(tr("Words per line"), W["caption_words"])
+        f.addRow(tr("Max line duration"), W["caption_max_dur"])
+        f.addRow(tr("Vertical position"), W["caption_pos"])
+        f.addRow(tr("Text colour"), W["caption_color"])
+        f.addRow(tr("Active word colour"), W["caption_hl"])
         f.addRow(W["caption_upper"])
-        W["sub_lang"] = combo([("Lingua originale", "orig"), ("Inglese (traduzione)", "en"),
-                               ("Originale + inglese sotto", "both")])
-        f.addRow("Lingua sottotitoli", W["sub_lang"])
-        f.addRow(hint("La traduzione in inglese la fa Whisper, offline, da qualsiasi lingua."))
-        W["hook"] = combo([("Nessuno", "off"), ("Automatico (prima frase)", "auto"),
-                           ("Scritto da me (per video)", "custom")])
+        W["sub_lang"] = combo([(tr("Original language"), "orig"), (tr("English (translation)"), "en"),
+                               (tr("Original + English below"), "both")])
+        f.addRow(tr("Caption language"), W["sub_lang"])
+        f.addRow(hint(tr("Whisper does the English translation, offline, from any language.")))
+        W["hook"] = combo([(tr("None"), "off"), (tr("Auto (first sentence)"), "auto"),
+                           (tr("Written by me (per video)"), "custom")])
         W["hook_dur"] = dspin(1, 8, 0.5, 2.8, 1, " s")
         self.hook_edit = QLineEdit()
-        self.hook_edit.setPlaceholderText("Titolo iniziale per il video selezionato")
+        self.hook_edit.setPlaceholderText(tr("Opening title for the selected video"))
         self.hook_edit.textEdited.connect(self._hook_edited)
         self.cta_edit = QLineEdit()
-        self.cta_edit.setPlaceholderText("es. Seguimi per altri video!  (vuoto = niente)")
+        self.cta_edit.setPlaceholderText(tr("e.g. Follow me for more videos!  (empty = none)"))
         self.cta_edit.textEdited.connect(lambda *_: self._settings_changed())
         W["cta_dur"] = dspin(1, 8, 0.5, 2.5, 1, " s")
         self.logo_edit = QLineEdit()
         self.logo_edit.setReadOnly(True)
-        self.logo_edit.setPlaceholderText("Nessun logo")
+        self.logo_edit.setPlaceholderText(tr("No logo"))
         lb = QPushButton("…")
         lb.setFixedWidth(32)
         lb.clicked.connect(self._pick_logo)
@@ -729,35 +708,35 @@ class MainWindow(QMainWindow):
         lrow.addWidget(self.logo_edit, 1)
         lrow.addWidget(lb)
         lrow.addWidget(lc)
-        W["logo_corner"] = combo([("In alto a destra", "tr"), ("In alto a sinistra", "tl"),
-                                  ("In basso a destra", "br"), ("In basso a sinistra", "bl")])
+        W["logo_corner"] = combo([(tr("Top right"), "tr"), (tr("Top left"), "tl"),
+                                  (tr("Bottom right"), "br"), (tr("Bottom left"), "bl")])
         W["logo_size"] = dspin(0.05, 0.4, 0.01, 0.16)
         W["logo_opacity"] = dspin(0.1, 1.0, 0.05, 0.85)
-        f.addRow(QLabel("<b>Titolo iniziale (hook)</b>"))
-        f.addRow("Titolo", W["hook"])
-        f.addRow("Testo", self.hook_edit)
-        f.addRow("Durata", W["hook_dur"])
+        f.addRow(QLabel("<b>%s</b>" % tr("Opening title (hook)")))
+        f.addRow(tr("Title"), W["hook"])
+        f.addRow(tr("Text"), self.hook_edit)
+        f.addRow(tr("Duration"), W["hook_dur"])
         f.addRow(QLabel("<b>Chiusura</b>"))
-        f.addRow("Invito finale", self.cta_edit)
-        f.addRow("Durata ", W["cta_dur"])
+        f.addRow(tr("Closing CTA"), self.cta_edit)
+        f.addRow(tr("Duration"), W["cta_dur"])
         f.addRow(QLabel("<b>Logo</b>"))
-        f.addRow("Immagine (PNG)", lrow)
-        f.addRow("Posizione", W["logo_corner"])
-        f.addRow("Dimensione", W["logo_size"])
-        f.addRow("Opacità", W["logo_opacity"])
-        f.addRow(hint("Dopo “Trascrivi” i sottotitoli si vedono nell'anteprima verticale."))
-        tabs.addTab(self._page(f), "Testi")
+        f.addRow(tr("Image (PNG)"), lrow)
+        f.addRow(tr("Position"), W["logo_corner"])
+        f.addRow(tr("Size"), W["logo_size"])
+        f.addRow(tr("Opacity"), W["logo_opacity"])
+        f.addRow(hint(tr("After “Transcribe”, the captions show in the vertical preview.")))
+        tabs.addTab(self._page(f), tr("Texts"))
 
         # --- export
         f = QFormLayout()
         W["resolution"] = combo(RES)
         W["preset"] = combo(X264)
         W["crf"] = ispin(14, 30, 18)
-        W["fmt_45"] = QCheckBox("4:5 (feed Instagram)")
-        W["fmt_11"] = QCheckBox("1:1 (quadrato)")
-        W["fmt_169"] = QCheckBox("16:9 (YouTube orizzontale)")
+        W["fmt_45"] = QCheckBox(tr("4:5 (Instagram feed)"))
+        W["fmt_11"] = QCheckBox(tr("1:1 (square)"))
+        W["fmt_169"] = QCheckBox(tr("16:9 (YouTube landscape)"))
         self.out_dir = QLineEdit()
-        self.out_dir.setPlaceholderText("Accanto al video originale")
+        self.out_dir.setPlaceholderText(tr("Next to the source video"))
         browse = QPushButton("…")
         browse.setFixedWidth(32)
         browse.clicked.connect(self._pick_out_dir)
@@ -766,31 +745,35 @@ class MainWindow(QMainWindow):
         row.addWidget(browse)
         self.suffix = QLineEdit("_short")
         self.cache_lab = hint("")
-        clear = QPushButton("Svuota cache")
+        clear = QPushButton(tr("Clear cache"))
         clear.clicked.connect(self._clear_cache)
         crow = QHBoxLayout()
         crow.addWidget(self.cache_lab, 1)
         crow.addWidget(clear)
-        f.addRow("Risoluzione", W["resolution"])
-        f.addRow("Encoding", W["preset"])
-        f.addRow("Qualità (CRF)", W["crf"])
-        f.addRow(QLabel("Esporta anche in:"))
+        f.addRow(tr("Resolution"), W["resolution"])
+        f.addRow(tr("Encoding"), W["preset"])
+        f.addRow(tr("Quality (CRF)"), W["crf"])
+        f.addRow(QLabel(tr("Also export as:")))
         f.addRow(W["fmt_45"])
         f.addRow(W["fmt_11"])
         f.addRow(W["fmt_169"])
-        f.addRow("Cartella output", row)
-        f.addRow("Suffisso file", self.suffix)
-        W["encoder"] = combo([("Automatico (hardware sul Mac)", "auto"), ("Hardware (VideoToolbox)", "hardware"),
+        f.addRow(tr("Output folder"), row)
+        f.addRow(tr("File suffix"), self.suffix)
+        W["encoder"] = combo([(tr("Auto (hardware on Mac)"), "auto"), ("Hardware (VideoToolbox)", "hardware"),
                               ("Software (x264)", "software")])
-        W["cover"] = QCheckBox("Crea anche la copertina (JPG)")
-        W["social"] = QCheckBox("Crea titolo, descrizione e hashtag (.txt)")
-        f.addRow("Encoder", W["encoder"])
+        W["cover"] = QCheckBox(tr("Also create the thumbnail (JPG)"))
+        W["social"] = QCheckBox(tr("Create title, description and hashtags (.txt)"))
+        f.addRow(tr("Encoder"), W["encoder"])
         f.addRow(W["cover"])
         f.addRow(W["social"])
-        f.addRow("Cache analisi", crow)
-        f.addRow(hint("I formati extra riusano la stessa analisi: costano solo il render. "
-                      "L'encoder hardware del Mac è 3–5 volte più veloce. CRF più basso = qualità "
-                      "più alta e file più grande (con l'hardware regola il bitrate)."))
+        f.addRow(tr("Analysis cache"), crow)
+        f.addRow(hint(tr("Extra formats reuse the same analysis: they only cost the render. The Mac hardware encoder is 3–5× faster. Lower CRF = higher quality and bigger files (with hardware it sets the bitrate).")))
+        self.ui_lang = combo([("English", "en"), ("Italiano", "it")])
+        self.ui_lang.setCurrentIndex(max(0, self.ui_lang.findData(i18n.lang())))
+        self.ui_lang.currentIndexChanged.connect(
+            lambda _i: self._settings().setValue("ui/lang", self.ui_lang.currentData()))
+        f.addRow(tr("UI language"), self.ui_lang)
+        f.addRow(hint(tr("Restart the app to apply the new language.")))
         tabs.addTab(self._page(f), "Export")
         return col
 
@@ -813,11 +796,11 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(box)
         lay.setContentsMargins(10, 6, 10, 8)
         row = QHBoxLayout()
-        self.stage_lab = QLabel("Pronto")
+        self.stage_lab = QLabel(tr("Ready"))
         self.bar = QProgressBar()
         self.bar.setRange(0, 1000)
         self.bar.setTextVisible(False)
-        self.start_btn = QPushButton("Crea short")
+        self.start_btn = QPushButton(tr("Create short"))
         self.start_btn.setObjectName("accent")
         self.start_btn.clicked.connect(self._start)
         self.stop_btn = QPushButton("Stop")
@@ -919,14 +902,14 @@ class MainWindow(QMainWindow):
     def _hook_edited(self, text):
         if self.current:
             key = os.path.abspath(self.current)
-            self._push_undo("Titolo iniziale", "hook", key, self.hook_text.get(key, ""))
+            self._push_undo(tr("Opening title"), "hook", key, self.hook_text.get(key, ""))
             self.hook_text[key] = text
             if text and self._val("hook") != "custom":
                 self._set("hook", "custom")
             self.replan_timer.start()
 
     def _pick_logo(self):
-        f, _ = QFileDialog.getOpenFileName(self, "Logo", "", "Immagini (*.png *.jpg *.jpeg *.webp)")
+        f, _ = QFileDialog.getOpenFileName(self, tr("Logo"), "", tr("Images (*.png *.jpg *.jpeg *.webp)"))
         if f:
             self._set_logo(f)
 
@@ -977,7 +960,14 @@ class MainWindow(QMainWindow):
                 elif isinstance(wd, QSpinBox):
                     wd.setValue(int(float(val)))
                 elif isinstance(wd, QComboBox):
-                    i = wd.findText(str(val))
+                    i = wd.findData(val)
+                    if i < 0:
+                        try:
+                            i = wd.findData(int(val))
+                        except (TypeError, ValueError):
+                            pass
+                    if i < 0:
+                        i = wd.findText(str(val))
                     if i >= 0:
                         wd.setCurrentIndex(i)
                 elif isinstance(wd, QCheckBox):
@@ -1001,7 +991,7 @@ class MainWindow(QMainWindow):
             if isinstance(wd, (QDoubleSpinBox, QSpinBox)):
                 st.setValue("opt/" + name, wd.value())
             elif isinstance(wd, QComboBox):
-                st.setValue("opt/" + name, wd.currentText())
+                st.setValue("opt/" + name, wd.currentData())
             elif isinstance(wd, QCheckBox):
                 st.setValue("opt/" + name, wd.isChecked())
         st.setValue("out_dir", self.out_dir.text())
@@ -1058,7 +1048,7 @@ class MainWindow(QMainWindow):
     def _fill_presets(self):
         self.preset_box.blockSignals(True)
         self.preset_box.clear()
-        self.preset_box.addItem("— scegli —", None)
+        self.preset_box.addItem(tr("— choose —"), None)
         for name in presets.BUILTIN:
             self.preset_box.addItem(name, ("builtin", name))
         for name in sorted(self.user_presets):
@@ -1073,10 +1063,10 @@ class MainWindow(QMainWindow):
         values = presets.BUILTIN[name] if kind == "builtin" else self.user_presets.get(name, {})
         for k, val in values.items():
             self._set(k, val)
-        self._log("Preset “%s” applicato" % name)
+        self._log(tr("Preset “%s” applied") % name)
 
     def _save_preset(self):
-        name, ok = QInputDialog.getText(self, "Salva preset", "Nome del preset:")
+        name, ok = QInputDialog.getText(self, tr("Save preset"), tr("Preset name:"))
         name = (name or "").strip()
         if not ok or not name:
             return
@@ -1088,7 +1078,7 @@ class MainWindow(QMainWindow):
     def _delete_preset(self):
         data = self.preset_box.currentData()
         if not data or data[0] != "user":
-            QMessageBox.information(self, APP_NAME, "Si possono eliminare solo i preset salvati da te (★).")
+            QMessageBox.information(self, APP_NAME, tr("Only presets you saved yourself (★) can be deleted."))
             return
         self.user_presets.pop(data[1], None)
         self._fill_presets()
@@ -1096,7 +1086,7 @@ class MainWindow(QMainWindow):
 
     # ---------------------------------------------------------- misc settings
     def _pick_music(self):
-        f, _ = QFileDialog.getOpenFileName(self, "Musica di sottofondo", "", "Audio (%s)" % AUDIO_EXT)
+        f, _ = QFileDialog.getOpenFileName(self, tr("Background music"), "", tr("Audio (%s)") % AUDIO_EXT)
         if f:
             self._set_music(f)
 
@@ -1107,7 +1097,7 @@ class MainWindow(QMainWindow):
             self._settings_changed()
 
     def _pick_out_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "Cartella output", self.out_dir.text())
+        d = QFileDialog.getExistingDirectory(self, tr("Output folder"), self.out_dir.text())
         if d:
             self.out_dir.setText(d)
 
@@ -1120,7 +1110,7 @@ class MainWindow(QMainWindow):
     def _clear_cache(self):
         diskcache.clear()
         self._refresh_cache_label()
-        self._log("Cache svuotata")
+        self._log(tr("Cache cleared"))
 
     # ================================================================ queue
     def _items(self) -> List[dict]:
@@ -1156,18 +1146,18 @@ class MainWindow(QMainWindow):
 
     def _add_dialog(self):
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Aggiungi video", "", "Video (%s)" % " ".join("*" + e for e in sorted(VIDEO_EXT)))
+            self, tr("Add videos"), "", tr("Video (%s)") % " ".join("*" + e for e in sorted(VIDEO_EXT)))
         self.add_files(files)
 
     def _add_folder(self):
-        d = QFileDialog.getExistingDirectory(self, "Aggiungi tutti i video di una cartella")
+        d = QFileDialog.getExistingDirectory(self, tr("Add every video in a folder"))
         if d:
             self.add_files([d])
 
     def _update_count(self):
         n = self.queue.count()
         self.drop_hint.setVisible(n == 0)
-        self.start_btn.setText("Crea short" if n <= 1 else "Crea %d short" % n)
+        self.start_btn.setText(tr("Create short") if n <= 1 else tr("Create %d shorts") % n)
 
     def _remove_selected(self):
         for it in self.queue.selectedItems():
@@ -1208,7 +1198,7 @@ class MainWindow(QMainWindow):
             if rec in self._workers:
                 self._workers.remove(rec)
             if not self._workers:
-                self.stage_lab.setText("Pronto")
+                self.stage_lab.setText(tr("Ready"))
 
         def ok(value):
             finish()
@@ -1236,7 +1226,7 @@ class MainWindow(QMainWindow):
 
     def _bg_failed(self, err):
         if err != CANCELLED:
-            self._log("Errore: %s" % err)
+            self._log(tr("Error: %s") % err)
 
     def _busy(self, label: str) -> bool:
         return any(r["label"] == label for r in self._workers)
@@ -1294,11 +1284,11 @@ class MainWindow(QMainWindow):
         if p:
             self._open_proxy(path, p)
             return
-        if not proxy.needs_proxy(self.reader) or self._busy("Proxy anteprima"):
+        if not proxy.needs_proxy(self.reader) or self._busy(tr("Preview proxy")):
             return
         out = proxy.proxy_path(path)
         dur = self.reader.count / self.reader.fps
-        self._log("Video pesante: preparo una copia leggera per l'anteprima fluida…")
+        self._log(tr("Heavy video: making a light copy for smooth preview…"))
 
         def job(progress):
             return path, proxy.build(path, out, progress, dur)
@@ -1308,7 +1298,7 @@ class MainWindow(QMainWindow):
             if src == self.current:
                 self._open_proxy(src, p2)
 
-        self._run(job, done, "Proxy anteprima")
+        self._run(job, done, tr("Preview proxy"))
 
     def _open_proxy(self, src, p):
         try:
@@ -1316,12 +1306,12 @@ class MainWindow(QMainWindow):
         except IOError:
             return
         if abs(pr.count - self.reader.count) > 2:
-            self._log("Proxy scartato (fotogrammi diversi dall'originale)")
+            self._log(tr("Proxy discarded (frame count differs from the original)"))
             pr.close()
             return
         self.proxy = pr
         self.proxy.sequential = self.play_timer.isActive()
-        self._log("Anteprima: uso la copia leggera in riproduzione")
+        self._log(tr("Preview: playing the light copy"))
 
     def _view_reader(self):
         """Proxy while playing or scrubbing (fluid); the original on a still."""
@@ -1386,7 +1376,7 @@ class MainWindow(QMainWindow):
         cuts, info = [], ""
         if a is None:
             self._clear_people()
-            info = "Premi “Analizza volti” per vedere il crop verticale."
+            info = tr("Press “Analyze faces” to see the vertical crop.")
         else:
             from ..pipeline import plan_from_analysis
             self._fill_people(a)
@@ -1398,15 +1388,15 @@ class MainWindow(QMainWindow):
             shots = self.result.path.shots
             wide = sum(1 for sh in shots if sh.kind == "wide")
             found = int(self.result.path.has_face.sum())
-            info = "%d inquadrature (%d larghe) · volto su %d%% dei frame" % (
+            info = tr("%d shots (%d wide) · face on %d%% of frames") % (
                 len(shots), wide, 100 * found // max(1, a.frame_count))
             ow, oh = self._preview_size()
             if s.layout == "split":
                 from .compose import build_split
                 self._split = build_split(a, o, ow, oh, self.person_pick.get(key))
-                info += " · split su %d%% dei frame" % (
+                info += tr(" · split on %d%% of frames") % (
                     100 * int(self._split.mask.sum()) // max(1, a.frame_count)) if self._split else \
-                    " · split: servono 2 persone nella stessa inquadratura"
+                    tr(" · split: need 2 people in the same shot")
             if s.punch and pcm is not None:
                 from ..silence import speech_intervals
                 from .compose import punch_curve
@@ -1436,9 +1426,9 @@ class MainWindow(QMainWindow):
                     self._motion = MotionCurves(c.dx + sd / np.maximum(1.0, pl.crop_w),
                                                 c.dy + sy / np.maximum(1.0, pl.crop_h), c.zoom * 1.04,
                                                 c.rot + sr, c.whip, c.zblur, c.glitch)
-                    info += " · stabilizzato"
+                    info += tr(" · stabilized")
         if s.cuts and self.removed:
-            info += " · tagli: −%.1fs" % sum(b - a2 for a2, b in self.removed)
+            info += tr(" · cuts: −%.1fs") % sum(b - a2 for a2, b in self.removed)
         ow, oh = self._preview_size()
         parts = []
         if words and s.subtitles == "burn":
@@ -1448,7 +1438,7 @@ class MainWindow(QMainWindow):
                 from .translate import cached_english
                 en = cached_english(self.current)
                 if en is None:
-                    info += " · traduzione: si fa al primo export (o con “Trascrivi”)"
+                    info += tr(" · translation: done at the first export (or with “Transcribe”)")
                 elif s.sub_lang == "en":
                     cap_words = en
                 else:
@@ -1523,10 +1513,10 @@ class MainWindow(QMainWindow):
         shot = next((sh for sh in r.path.shots if sh.start <= i < sh.end), None)
         badge = ""
         if shot is not None:
-            badge = {"close": "Primo piano", "wide": "Largo · zoom %.2f×" % shot.zoom,
-                     "noface": "Nessun volto"}.get(shot.kind, shot.kind)
+            badge = {"close": tr("Close-up"), "wide": tr("Wide · zoom %.2f×") % shot.zoom,
+                     "noface": tr("No face")}.get(shot.kind, shot.kind)
         if cut_here:
-            badge = "✂ tagliato · " + badge
+            badge = tr("✂ cut · ") + badge
         split_here = self._split is not None and i < len(self._split.mask) and self._split.mask[i]
         self.src_view.set_frame(to_qimage(frame), crop=None if split_here else (x, y, w, h),
                                 face=(float(src_r.path.x[i]) * k, float(src_r.path.y[i]) * k)
@@ -1550,19 +1540,19 @@ class MainWindow(QMainWindow):
             self._schedule_restore(i, out)
             if beauty is not None:
                 out = beauty(out)
-        self._present(i, out, "Restauro volti…" if restore else ("Migliorata" if enh is not None else "Anteprima"))
+        self._present(i, out, tr("Restoring faces…") if restore else (tr("Enhanced") if enh is not None else tr("Preview")))
 
     # ---------------------------------------------------------- skin tone
     def _measure_skin(self, analysis):
         key = os.path.abspath(self.current)
         if key in self._skin:
             c = self._skin[key]
-            self.skin_lab.setText(c.describe() if c else "Nessun volto misurabile in questo video.")
+            self.skin_lab.setText(c.describe() if c else tr("No measurable face in this video."))
             return
-        if self._busy("Misura pelle"):
+        if self._busy(tr("Skin measure")):
             return
         path = self.current
-        self.skin_lab.setText("Misuro la pelle…")
+        self.skin_lab.setText(tr("Measuring skin…"))
 
         def job(_progress):
             from ..skin import measure_video
@@ -1574,7 +1564,7 @@ class MainWindow(QMainWindow):
             if k == os.path.abspath(self.current or ""):
                 self._replan()
 
-        self._run(job, done, "Misura pelle")
+        self._run(job, done, tr("Skin measure"))
 
     def _skin_now(self):
         if not self._val("skin") or not self.current:
@@ -1590,15 +1580,14 @@ class MainWindow(QMainWindow):
     def _save_skin_cube(self):
         c = self._skin_now()
         if c is None:
-            QMessageBox.information(self, APP_NAME, "Attiva “Normalizza il colore della pelle” e premi "
-                                    "“Analizza volti”: la LUT si basa sulla pelle misurata nel video.")
+            QMessageBox.information(self, APP_NAME, tr("Enable “Normalize skin color” and press “Analyze faces”: the LUT is based on the skin measured in the video."))
             return
         base = os.path.splitext(os.path.basename(self.current))[0]
-        path, _ = QFileDialog.getSaveFileName(self, "Salva LUT", base + "_pelle.cube", "LUT (*.cube)")
+        path, _ = QFileDialog.getSaveFileName(self, tr("Save LUT"), base + "_pelle.cube", "LUT (*.cube)")
         if path:
             from ..skin import write_cube
             write_cube(c, path)
-            self._log("LUT salvata: %s (in Resolve: tasto destro sulla clip > LUT)" % path)
+            self._log(tr("LUT saved: %s (in Resolve: right-click the clip > LUT)") % path)
 
     def _present(self, i, out, tag):
         if self._burner is not None:
@@ -1616,7 +1605,7 @@ class MainWindow(QMainWindow):
         """Restore the shown frame in the background; only the latest request
         survives while one is running (scrubbing doesn't queue up work)."""
         self._restore_pending = (i, out.copy(), self._restore_key())
-        if not self._busy("Restauro volti"):
+        if not self._busy(tr("Face restoration")):
             self._start_restore()
 
     def _start_restore(self):
@@ -1641,9 +1630,9 @@ class MainWindow(QMainWindow):
             if self._restore_pending is not None:
                 self._start_restore()
             elif fi == self.slider.value() and not self.play_timer.isActive():
-                self._present(fi, img, "Volto restaurato")
+                self._present(fi, img, tr("Face restored"))
 
-        self._run(job, done, "Restauro volti")
+        self._run(job, done, tr("Face restoration"))
 
     def _refresh_frame(self, *_):
         self._show_frame(self.slider.value())
@@ -1679,13 +1668,13 @@ class MainWindow(QMainWindow):
                 self.player.errorOccurred.connect(self._player_error)
                 self.player.mediaStatusChanged.connect(self._media_status)
             except Exception as exc:
-                self._log("Audio dell'anteprima non disponibile (%s)" % exc)
+                self._log(tr("Preview audio unavailable (%s)") % exc)
                 self.player = False
         return bool(self.player) and bool(self.current)
 
     def _player_error(self, *_):
         if self.player:
-            self._log("Audio dell'anteprima: %s" % self.player.errorString())
+            self._log(tr("Preview audio: %s") % self.player.errorString())
 
     def _audio_active(self) -> bool:
         if not self.player:
@@ -1787,7 +1776,7 @@ class MainWindow(QMainWindow):
             self._play_from(t)
 
     def _pa_build(self, t: float):
-        if self._busy("Audio anteprima"):
+        if self._busy(tr("Preview audio")):
             self._pa_pending = t
             return
         if self._pa_dir is None:
@@ -1825,12 +1814,12 @@ class MainWindow(QMainWindow):
                 now = self._player_time() if self._audio_active() else self.slider.value() / self.reader.fps
                 if a <= now < b - 0.5:
                     self._set_source(out, a, now)
-                    self.stage_lab.setText("Audio: come uscirà")
+                    self.stage_lab.setText(tr("Audio: as exported"))
 
-        self._run(job, done, "Audio anteprima")
+        self._run(job, done, tr("Preview audio"))
 
     def _ab_toggled(self, on):
-        self.ab_btn.setToolTip("Stai ascoltando l'originale" if on else "Stai ascoltando l'audio trattato")
+        self.ab_btn.setToolTip(tr("You're hearing the original") if on else tr("You're hearing the treated audio"))
         self._pa_refresh()
 
     def _stop_audio(self):
@@ -1893,7 +1882,7 @@ class MainWindow(QMainWindow):
                 if cur is not None and t > cur["end"] - 0.6:
                     self._play_from(t)               # this window is over: next one (or original)
                     return
-                if (cur is not None and t > cur["end"] - 12 and not self._busy("Audio anteprima")
+                if (cur is not None and t > cur["end"] - 12 and not self._busy(tr("Preview audio"))
                         and self._pa_find(cur["end"] - 0.6) is None):
                     self._pa_build(cur["end"] - 1.0)  # prepare the next window ahead of time
         else:
@@ -1923,7 +1912,7 @@ class MainWindow(QMainWindow):
 
     # ---------------------------------------------------------- analysis
     def _analyze(self):
-        if not self.current or self._busy("Analisi volti"):
+        if not self.current or self._busy(tr("Face analysis")):
             return
         path, opts = self.current, self.reframe_options()
         self.analyze_btn.setEnabled(False)
@@ -1937,20 +1926,20 @@ class MainWindow(QMainWindow):
             p, a = res
             self.cache.put(p, opts, a)
             self.analyze_btn.setEnabled(True)
-            self._log("Analisi di %s: %d frame" % (os.path.basename(p), a.frame_count))
+            self._log(tr("Analysing %s: %d frames") % (os.path.basename(p), a.frame_count))
             self._refresh_cache_label()
             if p == self.current:
                 self._people_for = None
                 self._replan()
 
-        self._run(job, done, "Analisi volti", on_fail=lambda _e: self.analyze_btn.setEnabled(True))
+        self._run(job, done, tr("Face analysis"), on_fail=lambda _e: self.analyze_btn.setEnabled(True))
 
     def _transcribe(self, then=None):
-        if not self.current or self._busy("Trascrizione"):
+        if not self.current or self._busy(tr("Transcription")):
             return
         path, lang = self.current, self._val("language")
         if self.cache.words(path, lang) is not None:
-            self._log("Trascrizione già in cache")
+            self._log(tr("Transcript already cached"))
             self._replan()
             if then:
                 then()
@@ -1963,20 +1952,20 @@ class MainWindow(QMainWindow):
 
         def done(words):
             self.tr_btn.setEnabled(True)
-            self._log("Trascrizione: %d parole" % len(words))
+            self._log(tr("Transcript: %d words") % len(words))
             self._refresh_cache_label()
             self._replan()
             if then:
                 then()
 
-        self._run(job, done, "Trascrizione", on_fail=lambda _e: self.tr_btn.setEnabled(True))
+        self._run(job, done, tr("Transcription"), on_fail=lambda _e: self.tr_btn.setEnabled(True))
 
     # ---------------------------------------------------------- subtitle editor
     def _open_subeditor(self):
         if not self.current:
             return
         if self._words() is None:
-            self._log("Prima trascrivo il video, poi apro l'editor dei sottotitoli…")
+            self._log(tr("First I'll transcribe the video, then I'll open the caption editor…"))
             self._transcribe(then=self._open_subeditor)
             return
         ed = getattr(self, "_subeditor", None)
@@ -1999,7 +1988,7 @@ class MainWindow(QMainWindow):
             extra = "%s|%s" % (lang or "", MODEL_NAME)
             if diskcache.load(path, "words_orig", extra) is None:
                 diskcache.save(path, "words_orig", self.cache.words(path, lang), extra)  # keep Whisper's
-            self._push_undo("Modifica sottotitoli", "words", os.path.abspath(path), self.cache.words(path, lang))
+            self._push_undo(tr("Edit captions"), "words", os.path.abspath(path), self.cache.words(path, lang))
             self.cache.put_words(path, lang, words)
             if path == self.current:
                 self.replan_timer.start()
@@ -2033,11 +2022,11 @@ class MainWindow(QMainWindow):
     def _find_highlights(self):
         it = self.queue.currentItem()
         if it is None:
-            QMessageBox.information(self, APP_NAME, "Seleziona prima un video nella lista.")
+            QMessageBox.information(self, APP_NAME, tr("Select a video in the list first."))
             return
         src = it.data(Qt.UserRole)
         if src.get("clip"):
-            QMessageBox.information(self, APP_NAME, "Seleziona il video originale, non una clip.")
+            QMessageBox.information(self, APP_NAME, tr("Select the original video, not a clip."))
             return
         self._transcribe(then=lambda: self._highlights_ready(src))
 
@@ -2045,12 +2034,12 @@ class MainWindow(QMainWindow):
         from .highlights import find_highlights
         words = self.cache.words(src["path"], self._val("language"))
         if not words:
-            self._log("Nessuna trascrizione: impossibile cercare i momenti migliori")
+            self._log(tr("No transcript: can't look for the best moments"))
             return
         dur = self.reader.count / self.reader.fps if self.reader and self.current == src["path"] else words[-1].end
         hls = find_highlights(words, dur, count=self.hl_count.value())
         if not hls:
-            self._log("Video troppo corto o senza parlato: nessun momento proposto")
+            self._log(tr("Video too short or no speech: no moments suggested"))
             return
         row = next(i for i in range(self.queue.count()) if self.queue.item(i).data(Qt.UserRole) is src
                    or self.queue.item(i).data(Qt.UserRole) == src)
@@ -2061,7 +2050,7 @@ class MainWindow(QMainWindow):
             self._add_item({"path": src["path"], "clip": (h.start, h.end), "stem": "%s_clip%d" % (base, k),
                             "label": "   ↳ %s–%s  %s" % (_fmt(h.start), _fmt(h.end), title)},
                            row + k - n_existing)
-        self._log("Trovati %d momenti in %s: li trovi in lista sotto al video" % (len(hls), src["label"]))
+        self._log(tr("Found %d moments in %s: they're in the list under the video") % (len(hls), src["label"]))
         self._update_count()
 
     # ---------------------------------------------------------- people
@@ -2089,11 +2078,11 @@ class MainWindow(QMainWindow):
         pick = self.person_pick.get(os.path.abspath(self.current)) or []
         chosen = {p.id for p in (match_person(people, sig) for sig in pick) if p is not None}
         auto = QToolButton()
-        auto.setText("Auto")
+        auto.setText(tr("Auto"))
         auto.setCheckable(True)
         auto.setFixedSize(64, 64)
         auto.setObjectName("person")
-        auto.setToolTip("Usa l'impostazione “Segui” (persona principale o chi parla)")
+        auto.setToolTip(tr("Use the “Follow” setting (main person or whoever speaks)"))
         self.people_group.addButton(auto, -2)
         self.people_layout.insertWidget(self.people_layout.count() - 1, auto)
         auto.setChecked(not chosen)
@@ -2115,7 +2104,7 @@ class MainWindow(QMainWindow):
                     crop = cv2.resize(crop, (112, 112), interpolation=cv2.INTER_AREA)
                     btn.setIcon(QIcon(QPixmap.fromImage(to_qimage(crop))))
             secs = int(p.samples * analysis.frame_count / max(1, len(analysis.samples)) / fps)
-            btn.setToolTip("Persona %d · in %d inquadrature · ~%ds a schermo" % (p.id + 1, len(p.tracks), secs))
+            btn.setToolTip(tr("Person %d · in %d shots · ~%ds on screen") % (p.id + 1, len(p.tracks), secs))
             self.people_group.addButton(btn, p.id)
             self.people_layout.insertWidget(self.people_layout.count() - 1, btn)
             btn.setChecked(p.id in chosen)
@@ -2135,11 +2124,11 @@ class MainWindow(QMainWindow):
             if -2 in buttons:
                 buttons[-2].setChecked(not any_on)
         picked = [p for p in self._people if p.id in buttons and buttons[p.id].isChecked()]
-        self._push_undo("Scelta persona", "person", path, self.person_pick.get(path))
+        self._push_undo(tr("Person choice"), "person", path, self.person_pick.get(path))
         if picked:
             self.person_pick[path] = [p.sig for p in picked]
-            self._log("%s: segue %s" % (os.path.basename(path),
-                                         ", ".join("persona %d" % (p.id + 1) for p in picked)))
+            self._log(tr("%s: following %s") % (os.path.basename(path),
+                                         ", ".join(tr("person %d") % (p.id + 1) for p in picked)))
         else:
             self.person_pick.pop(path, None)
         self._replan()
@@ -2161,7 +2150,7 @@ class MainWindow(QMainWindow):
         cache = self.__dict__.setdefault("_gains", {})
         if key in cache:
             return cache[key]
-        if not self._busy("Bilanciamento"):
+        if not self._busy(tr("White balance")):
             path = self.current
 
             def job(_progress):
@@ -2171,7 +2160,7 @@ class MainWindow(QMainWindow):
                 except Exception:
                     return path, None
 
-            self._run(job, self._gains_done, "Bilanciamento")
+            self._run(job, self._gains_done, tr("White balance"))
         return None
 
     def _gains_done(self, res):
@@ -2190,10 +2179,10 @@ class MainWindow(QMainWindow):
         if st is not None:
             cache[key] = st
             return st
-        if not self._busy("Stabilizzazione"):
+        if not self._busy(tr("Stabilization")):
             path = self.current
             cuts = [x.frame for x in a.samples if x.cut]
-            self._log("Stabilizzazione: analisi del movimento (una volta per file)…")
+            self._log(tr("Stabilization: motion analysis (once per file)…"))
 
             def job(progress):
                 from .stabilize import estimate
@@ -2202,7 +2191,7 @@ class MainWindow(QMainWindow):
                     diskcache.save(path, "stab", st, "v1")
                 return path, st
 
-            self._run(job, self._stab_done, "Stabilizzazione")
+            self._run(job, self._stab_done, tr("Stabilization"))
         return None
 
     def _stab_done(self, res):
@@ -2269,16 +2258,16 @@ class MainWindow(QMainWindow):
             self._replan()
 
     def _undo_action(self):
-        self._undo_redo(self._undo, self._redo, "Annullato")
+        self._undo_redo(self._undo, self._redo, tr("Undone"))
 
     def _redo_action(self):
-        self._undo_redo(self._redo, self._undo, "Ripristinato")
+        self._undo_redo(self._redo, self._undo, tr("Redone"))
 
     def _sync_undo(self):
         self.undo_btn.setEnabled(bool(self._undo))
         self.redo_btn.setEnabled(bool(self._redo))
-        self.undo_btn.setToolTip("Annulla: " + self._undo[-1][0] if self._undo else "Niente da annullare")
-        self.redo_btn.setToolTip("Ripeti: " + self._redo[-1][0] if self._redo else "Niente da ripetere")
+        self.undo_btn.setToolTip(tr("Undo: ") + self._undo[-1][0] if self._undo else tr("Nothing to undo"))
+        self.redo_btn.setToolTip(tr("Redo: ") + self._redo[-1][0] if self._redo else tr("Nothing to redo"))
 
     def _shortcut_undo(self):
         fw = QApplication.focusWidget()
@@ -2327,7 +2316,7 @@ class MainWindow(QMainWindow):
 
     def _apply_project(self, d: dict):
         if not isinstance(d, dict) or "items" not in d:
-            raise ValueError("file di progetto non valido")
+            raise ValueError(tr("invalid project file"))
         self._pause()
         for name, val in (d.get("options") or {}).items():
             try:
@@ -2338,7 +2327,7 @@ class MainWindow(QMainWindow):
         self.current = None
         for it in d["items"]:
             if not os.path.exists(it.get("path", "")):
-                self._log("Manca: %s" % it.get("path"))
+                self._log(tr("Missing: %s") % it.get("path"))
                 continue
             it = dict(it)
             if it.get("clip"):
@@ -2378,8 +2367,8 @@ class MainWindow(QMainWindow):
             self._apply_project(json.load(f))
 
     def _save_project(self):
-        start = getattr(self, "_project_path", "") or os.path.expanduser("~/progetto.shorts")
-        path, _ = QFileDialog.getSaveFileName(self, "Salva progetto", start, "Progetto Shorts (*.shorts)")
+        start = getattr(self, "_project_path", "") or os.path.expanduser("~/project.shorts")
+        path, _ = QFileDialog.getSaveFileName(self, tr("Save project"), start, tr("Shorts Project (*.shorts)"))
         if not path:
             return
         if not path.endswith(".shorts"):
@@ -2387,23 +2376,23 @@ class MainWindow(QMainWindow):
         try:
             self.save_project(path)
         except OSError as exc:
-            QMessageBox.warning(self, APP_NAME, "Salvataggio non riuscito: %s" % exc)
+            QMessageBox.warning(self, APP_NAME, tr("Saving failed: %s") % exc)
             return
         self._project_path = path
-        self._log("Progetto salvato: %s" % path)
+        self._log(tr("Project saved: %s") % path)
 
     def _open_project(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Apri progetto", os.path.dirname(
-            getattr(self, "_project_path", "") or os.path.expanduser("~")), "Progetto Shorts (*.shorts)")
+        path, _ = QFileDialog.getOpenFileName(self, tr("Open project"), os.path.dirname(
+            getattr(self, "_project_path", "") or os.path.expanduser("~")), tr("Shorts Project (*.shorts)"))
         if not path:
             return
         try:
             self.load_project(path)
         except (OSError, ValueError) as exc:
-            QMessageBox.warning(self, APP_NAME, "Impossibile aprire il progetto: %s" % exc)
+            QMessageBox.warning(self, APP_NAME, tr("Can't open the project: %s") % exc)
             return
         self._project_path = path
-        self._log("Progetto aperto: %s" % path)
+        self._log(tr("Project opened: %s") % path)
 
     @staticmethod
     def autosave_path() -> str:
@@ -2440,7 +2429,7 @@ class MainWindow(QMainWindow):
         n = len([i for i in d.get("items", []) if os.path.exists(i.get("path", ""))])
         if not n:
             return
-        if QMessageBox.question(self, APP_NAME, "Riprendere la sessione precedente (%d video)?" % n) \
+        if QMessageBox.question(self, APP_NAME, tr("Resume the previous session (%d videos)?") % n) \
                 == QMessageBox.Yes:
             try:
                 self._apply_project(d)
@@ -2461,24 +2450,24 @@ class MainWindow(QMainWindow):
         it = self.queue.currentItem()
         data = it.data(Qt.UserRole) if it else None
         if not data:
-            QMessageBox.information(self, APP_NAME, "Seleziona un video.")
+            QMessageBox.information(self, APP_NAME, tr("Select a video."))
             return
         words = self._social_words(data)
         if not words:
-            QMessageBox.information(self, APP_NAME, "Prima serve la trascrizione: premi “Trascrivi”.")
+            QMessageBox.information(self, APP_NAME, tr("You need a transcript first: press “Transcribe”."))
             return
         key = os.path.abspath(data["path"])
         hook = self.hook_text.get(key) or first_sentence(words)
         t = make_texts(words, hook, self._val("language"))
         dlg = QDialog(self)
-        dlg.setWindowTitle("Testi per i social")
+        dlg.setWindowTitle(tr("Social texts"))
         lay = QVBoxLayout(dlg)
-        for name, field, multi in (("Titolo", "title", False), ("Descrizione", "description", True),
+        for name, field, multi in ((tr("Title"), "title", False), ("Descrizione", "description", True),
                                    ("Hashtag", "hashtags", False)):
             row = QHBoxLayout()
             row.addWidget(QLabel(name))
             row.addStretch(1)
-            b = QPushButton("Copia")
+            b = QPushButton(tr("Copy"))
             row.addWidget(b)
             lay.addLayout(row)
             ed = QPlainTextEdit(t[field]) if multi else QLineEdit(t[field])
@@ -2487,7 +2476,7 @@ class MainWindow(QMainWindow):
             lay.addWidget(ed)
             b.clicked.connect(lambda _=False, e=ed: QApplication.clipboard().setText(
                 e.toPlainText() if isinstance(e, QPlainTextEdit) else e.text()))
-        close = QPushButton("Chiudi")
+        close = QPushButton(tr("Close"))
         close.clicked.connect(dlg.accept)
         lay.addWidget(close)
         dlg.resize(520, 380)
@@ -2499,13 +2488,12 @@ class MainWindow(QMainWindow):
         it = self.queue.currentItem()
         data = it.data(Qt.UserRole) if it else None
         if not data:
-            QMessageBox.information(self, APP_NAME, "Seleziona un video.")
+            QMessageBox.information(self, APP_NAME, tr("Select a video."))
             return
         path = data["path"]
         a = self.cache.get(path, self.reframe_options()) if path == self.current else None
         if a is None:
-            QMessageBox.information(self, APP_NAME, "Prima premi “Analizza volti”: le copertine partono "
-                                    "dai fotogrammi con il volto migliore.")
+            QMessageBox.information(self, APP_NAME, tr("Press “Analyze faces” first: thumbnails start from the frames with the best face."))
             return
         if data.get("clip"):
             from .jobs import slice_analysis
@@ -2514,23 +2502,23 @@ class MainWindow(QMainWindow):
                 a = slice_analysis(a, f0, f1)
             except Exception:
                 pass
-        if self._busy("Copertine"):
+        if self._busy(tr("Thumbnails")):
             return
         words = self._social_words(data) or []
         key = os.path.abspath(path)
         hook = self.hook_text.get(key, "")
-        self._log("Copertine: scelgo i fotogrammi e scontorno…")
+        self._log(tr("Thumbnails: picking frames and cutting out the subject…"))
 
         def job(progress):
             from . import thumbnail as T
             return data, T.prepare(path, a, count=4, progress=progress, log=lambda *_: None), words, hook
 
-        self._run(job, self._thumbs_ready, "Copertine")
+        self._run(job, self._thumbs_ready, tr("Thumbnails"))
 
     def _thumbs_ready(self, res):
         data, variants, words, hook = res
         if not variants:
-            QMessageBox.information(self, APP_NAME, "Nessun volto utilizzabile per una copertina.")
+            QMessageBox.information(self, APP_NAME, tr("No usable face for a thumbnail."))
             return
         from . import thumbnail as T
         from .captions_qt import make_thumb_text_renderer
@@ -2558,11 +2546,11 @@ class MainWindow(QMainWindow):
         vertical = o.follow_vertical or (r.path.zoom[i] * o.zoom) > 1.0
         y = cy - (0.5 - o.face_height_pos) * float(r.plan.crop_h[i]) if vertical else None
         key = os.path.abspath(self.current)
-        self._push_undo("Correzione inquadratura", "manual", key, list(self.manual.get(key, [])))
+        self._push_undo(tr("Crop correction"), "manual", key, list(self.manual.get(key, [])))
         man = [m for m in self.manual.get(key, []) if m[0] != i]
         man.append((i, cx, y))
         self.manual[key] = sorted(man)
-        self._log("Correzione a %s" % _fmt(i / self.reader.fps))
+        self._log(tr("Correction at %s") % _fmt(i / self.reader.fps))
         self._replan()
 
     def _manual_auto_here(self):
@@ -2570,7 +2558,7 @@ class MainWindow(QMainWindow):
             return
         i = self.slider.value()
         key = os.path.abspath(self.current)
-        self._push_undo("Torna automatico", "manual", key, list(self.manual.get(key, [])))
+        self._push_undo(tr("Back to auto"), "manual", key, list(self.manual.get(key, [])))
         man = [m for m in self.manual.get(key, []) if m[0] != i] + [(i, None, None)]
         self.manual[key] = sorted(man, key=lambda m: m[0])
         self._replan()
@@ -2579,7 +2567,7 @@ class MainWindow(QMainWindow):
         if self.current:
             key = os.path.abspath(self.current)
             if self.manual.get(key):
-                self._push_undo("Cancella correzioni", "manual", key, list(self.manual[key]))
+                self._push_undo(tr("Clear all corrections"), "manual", key, list(self.manual[key]))
             self.manual.pop(key, None)
             self._replan()
 
@@ -2587,7 +2575,7 @@ class MainWindow(QMainWindow):
     def _start(self):
         items = self._items()
         if not items:
-            QMessageBox.information(self, APP_NAME, "Aggiungi almeno un video.")
+            QMessageBox.information(self, APP_NAME, tr("Add at least one video."))
             return
         self._save_settings()
         if not self._confirm_restore_time(items):
@@ -2598,7 +2586,7 @@ class MainWindow(QMainWindow):
             renderer = make_renderer(self._val("caption_color"), self._val("caption_upper"),
                                      self._val("caption_hl"))
         except Exception as exc:
-            self._log("Sottotitoli Qt non disponibili (%s), uso OpenCV" % exc)
+            self._log(tr("Qt captions unavailable (%s), using OpenCV") % exc)
         for i in range(len(items)):
             self._set_status(i, "○")
         worker = BatchWorker(items, self.job_settings(), self.cache, renderer)
@@ -2642,15 +2630,14 @@ class MainWindow(QMainWindow):
         if eta < 600:
             return True
         name = next(label for label, k in RESTORE if k == key).split(" —")[0]
-        msg = ("Con %s il restauro volti richiederà circa %s (stima su un M1, un volto per "
-               "fotogramma; i tagli lo riducono).\n\nContinuare?" % (name, _dur(eta)))
+        msg = (tr("With %s face restoration will take about %s (M1 estimate, one face per frame; cuts reduce it).\n\nContinue?") % (name, _dur(eta)))
         return QMessageBox.question(self, APP_NAME, msg) == QMessageBox.Yes
 
     def _on_file_started(self, i):
         self._set_status(i, "◐")
 
     def _on_progress(self, i, stage, f):
-        self.stage_lab.setText("Video %d/%d · %s %d%%" % (i + 1, self._total, stage, int(f * 100)))
+        self.stage_lab.setText(tr("Video %d/%d · %s %d%%") % (i + 1, self._total, stage, int(f * 100)))
         self.bar.setValue(int(f * 1000))
 
     def _on_file_done(self, i, ok, res):
@@ -2662,21 +2649,21 @@ class MainWindow(QMainWindow):
                 data["outs"] = list(res)
                 it.setData(Qt.UserRole, data)
             for out in res:
-                self._log("✓ Creato: %s" % out)
+                self._log(tr("✓ Created: %s") % out)
         else:
-            self._log("✕ Errore: %s" % res)
+            self._log(tr("✕ Error: %s") % res)
 
     def _batch_finished(self):
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        self.stage_lab.setText("Fatto")
+        self.stage_lab.setText(tr("Done"))
         self.batch = None
         self._refresh_cache_label()
 
     def _stop(self):
         if self.batch:
             self.batch.cancel.set()
-            self.stage_lab.setText("Interruzione…")
+            self.stage_lab.setText(tr("Stopping…"))
 
     def _log(self, text):
         self.log_view.appendPlainText(text)
@@ -2698,7 +2685,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, ev):
         if self.batch:
-            if QMessageBox.question(self, APP_NAME, "Elaborazione in corso. Interrompere e uscire?") \
+            if QMessageBox.question(self, APP_NAME, tr("Processing. Stop and quit?")) \
                     != QMessageBox.Yes:
                 ev.ignore()
                 return
@@ -2768,6 +2755,7 @@ def apply_theme(app: QApplication):
 def main(argv=None) -> int:
     app = QApplication(sys.argv if argv is None else argv)
     app.setApplicationName(APP_NAME)
+    i18n.set_lang(QSettings("face_reframe", "ShortsStudio").value("ui/lang", "en") or "en")
     apply_theme(app)
     win = MainWindow()
     win.add_files([a for a in (sys.argv[1:] if argv is None else argv[1:]) if os.path.exists(a)])

@@ -14,6 +14,8 @@ import hashlib
 import os
 import re
 import subprocess
+
+from ..i18n import tr
 import sys
 import time
 from typing import Callable, Optional
@@ -90,4 +92,4 @@ def build(src: str, out: str, progress: Optional[Callable[[float], None]] = None
         if proc.returncode == 0:
             os.replace(tmp, out)
             return out
-    raise RuntimeError("proxy non creato: %s" % err[-300:])
+    raise RuntimeError(tr("proxy not created: %s") % err[-300:])

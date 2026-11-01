@@ -30,6 +30,7 @@ import numpy as np
 from ..cinematic import CinematicParams
 from ..enhance import EnhanceOptions
 from ..geometry import parse_aspect
+from ..i18n import tr
 from ..pipeline import Options
 from ..silence import BreathParams, SpeechParams
 from . import diskcache
@@ -360,7 +361,7 @@ def preview_audio(src: str, start: float, dur: float, s: JobSettings, out: str) 
     cmd += ["-filter_complex", graph, "-map", "[a]", "-t", "%.3f" % dur, "-c:a", "pcm_s16le", out]
     raw = subprocess.run(cmd, capture_output=True, check=False)
     if raw.returncode != 0:
-        raise RuntimeError("anteprima audio: %s" % raw.stderr.decode(errors="replace")[-300:])
+        raise RuntimeError(tr("audio preview: %s") % raw.stderr.decode(errors="replace")[-300:])
     return out
 
 
@@ -541,7 +542,7 @@ def transcribe_file(path: str, language: Optional[str], cache: Optional[Analysis
     if pcm is None:
         pcm = extract_audio(path)
     words, lang = transcribe(pcm, language, progress=progress, log=log)
-    log("  %d parole (%s)" % (len(words), lang or "?"))
+    log(tr("  %d words (%s)") % (len(words), lang or "?"))
     if cache is not None:
         cache.put_words(path, language, words)
     return words
@@ -556,22 +557,22 @@ def cut_spans(pcm, duration: float, s: JobSettings, words, log: Log) -> Optional
         if found:
             spans = found
         else:
-            log("  nessun parlato rilevato: pause non tagliate")
+            log(tr("  no speech detected: pauses not cut"))
     holes: List[Span] = []
     if s.cut_breaths:
         br = silence.breath_intervals(pcm, BreathParams(margin_db=s.speech.margin_db))
         holes += [(a - 0.03, b + 0.03) for a, b in br]
-        log("  %d respiri" % len(br))
+        log(tr("  %d breaths") % len(br))
     if words is not None and s.cut_fillers:
         from ..transcribe import filler_spans
         fs = filler_spans(words)
         holes += fs
-        log("  %d filler (ehm, uhm...)" % len(fs))
+        log(tr("  %d fillers (um, uh…)") % len(fs))
     if words is not None and s.cut_retakes:
         from ..retakes import retake_spans
         rs = retake_spans(words)
         holes += rs
-        log("  %d ripetizioni" % len(rs))
+        log(tr("  %d retakes") % len(rs))
     spans = subtract(spans, holes)
     if not spans or sum(b - a for a, b in spans) >= duration - 0.05:
         return None
@@ -619,8 +620,8 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         offset_f = 0
         if clip is not None:
             c0, c1 = max(0.0, clip[0]), min(src_dur or clip[1], clip[1])
-            log("Clip %s-%s" % (_ts(c0), _ts(c1)))
-            step("Ritaglio")(0.0)
+            log(tr("Clip %s-%s") % (_ts(c0), _ts(c1)))
+            step(tr("Trim"))(0.0)
             cur = trim(src, c0, c1, os.path.join(work, "clip.mkv"), check)
             offset_f = int(round(c0 * src_fps))
         duration, fps = media_info(cur)
@@ -632,40 +633,40 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         moves = s.motion if (s.motion is not None and s.motion.active) else None
         audio = has_audio(cur)
         if not audio:
-            log("  il video non ha audio: salto tagli, sottotitoli, punch-in e audio cinematico")
+            log(tr("  video has no audio: skipping cuts, captions, punch-in and cinematic audio"))
         if audio and (s.cuts or s.needs_words or s.punch or (moves is not None and moves.needs_audio)):
-            step("Audio")(0.0)
+            step(tr("Audio"))(0.0)
             pcm = extract_audio(cur)
             duration = len(pcm) / 16000.0
         if s.needs_words and audio:
-            log("Trascrizione (Whisper)...")
+            log(tr("Transcribing (Whisper)…"))
             try:
                 cached = cache.words(src, s.language) if cache is not None else None
                 if cached is not None and clip is not None:
                     words = slice_words(cached, clip[0], clip[1])
-                    log("  trascrizione dalla cache")
+                    log(tr("  transcript from cache"))
                 elif cached is not None:
                     words = cached
-                    log("  trascrizione dalla cache")
+                    log(tr("  transcript from cache"))
                 elif clip is None:
-                    words = transcribe_file(src, s.language, cache, step("Trascrizione"), log, pcm)
+                    words = transcribe_file(src, s.language, cache, step(tr("Transcription")), log, pcm)
                 else:
                     from ..transcribe import transcribe
-                    words, _ = transcribe(pcm, s.language, progress=step("Trascrizione"), log=log)
+                    words, _ = transcribe(pcm, s.language, progress=step(tr("Transcription")), log=log)
             except Cancelled:
                 raise
             except Exception as exc:
-                log("  Whisper non disponibile (%s): salto filler, ripetizioni e sottotitoli" % exc)
+                log(tr("  Whisper unavailable (%s): skipping fillers, retakes and captions") % exc)
                 words = None
         check()
         if s.cuts and pcm is not None:
             spans = cut_spans(pcm, duration, s, words, log)
             if spans is None:
-                log("  niente da tagliare")
+                log(tr("  nothing to cut"))
             else:
                 kept = sum(b - a for a, b in spans)
-                log("Tagli: %d segmenti, %.1fs su %.1fs" % (len(spans), kept, duration))
-                step("Tagli")(0.0)
+                log(tr("Cuts: %d segments, %.1fs of %.1fs") % (len(spans), kept, duration))
+                step(tr("Cuts"))(0.0)
                 cur = render_cut(cur, spans, os.path.join(work, "cut.mkv"), check)
                 if words is not None:
                     words = remap_words(words, spans)
@@ -674,12 +675,12 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         # ---- 2. cinematic audio (video is stream-copied)
         if s.cinematic and audio:
             from ..cinematic import enhance as cine
-            log("Audio cinematico...")
+            log(tr("Cinematic audio…"))
             nxt = os.path.join(work, "cine.mkv")
             # no cancel check inside: aborting mid-call would orphan its ffmpeg
             gain = cine(cur, nxt, s.cinematic_params,
-                        progress=lambda f: progress("Audio cinematico", f))
-            log("  trim %+.1f dB" % gain)
+                        progress=lambda f: progress(tr("Cinematic audio"), f))
+            log(tr("  trim %+.1f dB") % gain)
             cur = nxt
         check()
 
@@ -693,11 +694,11 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
             if full is not None:
                 analysis = slice_analysis(full, offset_f, offset_f + int(round(duration * fps))) \
                     if clip is not None else full
-                log("Volti: uso l'analisi dell'anteprima")
+                log(tr("Faces: reusing the preview analysis"))
         if analysis is None:
-            log("Rilevamento volti...")
+            log(tr("Detecting faces…"))
             analysis = analyze_video(cur, 0, None, stride=o.stride, min_score=o.min_score,
-                                     progress=step("Volti"))
+                                     progress=step(tr("Faces")))
             if cache is not None and spans is None and clip is None:
                 cache.put(src, o, analysis)
 
@@ -705,9 +706,9 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         manual = _map_manual(s.manual_by_file.get(src_abs), offset_f, fps, spans)
         track = dataclasses.replace(o.track, person=picks, manual=manual)
         if picks:
-            log("Inquadratura: segue le persone scelte nell'anteprima")
+            log(tr("Framing: follows the people picked in the preview"))
         if manual:
-            log("Inquadratura: %d correzioni manuali" % len(manual))
+            log(tr("Framing: %d manual corrections") % len(manual))
 
         punch = None
         if s.punch and pcm is not None:
@@ -723,27 +724,28 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         if s.skin:
             from ..skin import measure_video
             skin_fix = measure_video(cur, analysis, strength=s.skin_strength)
-            log("Pelle: %s" % (skin_fix.describe() if skin_fix else "nessun volto da misurare"))
-        restorer = make_restorer(s, log, step("Download modello"))
+            log(tr("Skin: %s") % (skin_fix.describe() if skin_fix
+                                 else tr("no face to measure")))
+        restorer = make_restorer(s, log, step(tr("Model download")))
         beautifier = None
         if s.beauty is not None and s.beauty.active:
             from ..beauty import Beautifier
             beautifier = Beautifier(s.beauty)
-            log("Beauty: levigatura %.0f%%, macchie %.0f%%, rughe %.0f%%"
+            log(tr("Beauty: smoothing %.0f%%, blemishes %.0f%%, wrinkles %.0f%%")
                 % (100 * s.beauty.smooth, 100 * s.beauty.blemish, 100 * s.beauty.wrinkles))
         if restorer is not None:
             per = restorer.timing()
             n = analysis.frame_count * len(aspects)
-            log("Restauro volti %s: %.2f s per volto -> circa %s per %d fotogrammi"
+            log(tr("Face restoration %s: %.2f s per face -> about %s for %d frames")
                 % (s.restore, per, _dur(per * n), n))
 
         second = None
         if words and s.subtitles != "off" and s.sub_lang in ("en", "both"):
             try:
                 from .translate import english_words
-                log("Traduzione in inglese (Whisper)...")
+                log(tr("English translation (Whisper)…"))
                 # whole source (cached for every later short/clip), then onto this timeline
-                en = english_words(src, cache, step("Traduzione"), log)
+                en = english_words(src, cache, step(tr("Translation")), log)
                 if clip is not None:
                     en = slice_words(en, clip[0], clip[1])
                 if spans is not None:
@@ -755,7 +757,7 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
             except Cancelled:
                 raise
             except Exception as exc:
-                log("  traduzione non disponibile (%s)" % exc)
+                log(tr("  translation unavailable (%s)") % exc)
         events = []
         if words and s.subtitles != "off":
             from ..transcribe import group_captions, to_srt
@@ -763,14 +765,14 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
             with open(srt, "w", encoding="utf-8") as fh:
                 fh.write(to_srt(group_captions(words, s.caption_words, s.caption_max_dur)))
             events = group_word_events(words, s.caption_words, s.caption_max_dur)
-            log("Sottotitoli: %d righe -> %s" % (len(events), os.path.basename(srt)))
+            log(tr("Captions: %d lines -> %s") % (len(events), os.path.basename(srt)))
 
         look_obj = None
         if s.look != "none" or s.auto_wb:
             from .look import Look, auto_gains
             gains = auto_gains(cur) if s.auto_wb else None
             look_obj = Look(s.look, s.look_strength, gains)
-            log("Colore: look %s%s" % (s.look, ", bilanciamento automatico" if gains else ""))
+            log(tr("Colour: look %s%s") % (s.look, tr(", auto balance") if gains else ""))
         stab = None
         if s.stabilize:
             from .stabilize import estimate
@@ -780,8 +782,8 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
             from . import diskcache
             st = diskcache.load(src, "stab", "v1")
             if st is None:
-                log("Stabilizzazione: analisi del movimento...")
-                st = estimate(src, shot_cuts, progress=step("Stabilizzazione"))
+                log(tr("Stabilization: motion analysis…"))
+                st = estimate(src, shot_cuts, progress=step(tr("Stabilization")))
                 if st is not None:
                     diskcache.save(src, "stab", st, "v1")
             if st is not None:
@@ -804,14 +806,14 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
             res = plan_from_analysis(analysis, oa)
             if aspect == aspects[0]:
                 found = int(res.path.has_face.sum())
-                log("  volto su %d/%d frame, %d inquadrature"
+                log(tr("  face on %d/%d frames, %d shots")
                     % (found, analysis.frame_count, len(res.path.segments)))
             out_w, out_h = output_size(aspect, s.output_height)
             split = None
             if s.layout == "split" and parse_aspect(aspect) < 1.0:
                 split = build_split(analysis, oa, out_w, out_h, picks)
                 if split is not None and aspect == aspects[0]:
-                    log("  split screen su %d frame" % int(split.mask.sum()))
+                    log(tr("  split screen on %d frames") % int(split.mask.sum()))
             curves = None
             if moves is not None:
                 from ..silence import speech_intervals
@@ -821,7 +823,7 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                 curves = build_motion(analysis.frame_count, fps, moves, cuts, shot_cuts, phrases,
                                       words, pcm, seed=_seed(src))
                 if aspect == aspects[0]:
-                    log("  movimenti: %d stacchi" % len(cuts))
+                    log(tr("  moves: %d cuts") % len(cuts))
             if stab is not None:
                 from .motion import MotionCurves
                 c2 = curves if curves is not None else MotionCurves.empty(analysis.frame_count)
@@ -842,16 +844,16 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                 parts = build_overlays(ov, hook_text, analysis.frame_count, fps, out_w, out_h, title_renderer, log)
                 if parts:
                     burner = Chain([burner] + parts)
-            log("Render %s %dx%d..." % (aspect, out_w, out_h))
+            log(tr("Render %s %dx%d…") % (aspect, out_w, out_h))
             tmp = os.path.join(work, "out.mp4")
             vargs = video_args(s, out_w, out_h)
             if aspect == aspects[0]:
-                log("  encoder: %s" % ("hardware (VideoToolbox)" if "h264_videotoolbox" in vargs else "x264"))
+                log(tr("  encoder: %s") % ("hardware (VideoToolbox)" if "h264_videotoolbox" in vargs else "x264"))
             render(cur, res.plan, tmp, (out_w, out_h), fps, 0, crf=s.crf,
-                   progress=step("Render %s" % aspect), preset=s.preset,
+                   progress=step(tr("Render %s") % aspect), preset=s.preset,
                    post_frame=burner, frame_fn=framer, video_args=vargs)
             if s.music_path and os.path.exists(s.music_path):
-                step("Musica")(0.0)
+                step(tr("Music"))(0.0)
                 mixed = os.path.join(work, "music.mp4")
                 mix_music(tmp, s.music_path, mixed, s.music_db, s.duck_ratio, check)
                 tmp = mixed
@@ -862,9 +864,9 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                     cp = make_cover(cur, analysis, framer, out_w, out_h, hook_text or (
                         __import__("face_reframe.app.overlays", fromlist=["x"]).first_sentence(words)
                         if words else ""), title_renderer, os.path.splitext(out)[0] + "_copertina.jpg")
-                    log("Copertina: %s" % os.path.basename(cp))
+                    log(tr("Thumbnail: %s") % os.path.basename(cp))
                 except Exception as exc:
-                    log("  copertina non creata (%s)" % exc)
+                    log(tr("  thumbnail not created (%s)") % exc)
                 try:
                     from . import thumbnail as T
                     import dataclasses as _dc
@@ -873,16 +875,16 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                         txt, hl = T.thumb_text(words or [], hook_text)
                         yp = os.path.splitext(out)[0] + "_youtube.jpg"
                         T.save(T.render(vs[0], txt, hl, "16:9", thumb_renderer), yp)
-                        log("Copertina YouTube: %s" % os.path.basename(yp))
+                        log(tr("YouTube thumbnail: %s") % os.path.basename(yp))
                 except Exception as exc:
-                    log("  copertina YouTube non creata (%s)" % exc)
+                    log(tr("  YouTube thumbnail not created (%s)") % exc)
             if aspect == aspects[0] and s.social:
                 from .social import make_texts, to_text
                 tp = os.path.splitext(out)[0] + "_testi.txt"
                 with open(tp, "w", encoding="utf-8") as fh:
                     fh.write(to_text(make_texts(words or [], hook_text, s.language)))
-                log("Testi social: %s" % os.path.basename(tp))
-        progress("Fatto", 1.0)
+                log(tr("Social texts: %s") % os.path.basename(tp))
+        progress(tr("Done"), 1.0)
         return done
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -934,7 +936,7 @@ def make_cover(path: str, analysis, framer, out_w: int, out_h: int, title: str, 
     ok, img = cap.read()
     cap.release()
     if not ok:
-        raise RuntimeError("fotogramma non leggibile")
+        raise RuntimeError(tr("unreadable frame"))
     out = framer(fr, img)
     if title.strip():
         t = (title_renderer or cv_title)(title.strip(), out_w)
@@ -950,7 +952,7 @@ def make_restorer(s: JobSettings, log: Log, progress=None):
     from .. import restore
     if not restore.is_available(s.restore):
         m = restore.MODELS[s.restore]
-        log("Scarico il modello %s (%d MB, una volta sola)..." % (m.file, m.mb))
+        log(tr("Downloading the %s model (%d MB, once)…") % (m.file, m.mb))
         restore.download(s.restore, progress)
     return restore.FaceRestorer(s.restore, s.restore_fidelity, s.restore_blend, log=log)
 
@@ -967,7 +969,7 @@ def _dur(sec: float) -> str:
         return "%d s" % sec
     if sec < 5400:
         return "%d min" % round(sec / 60.0)
-    return "%.1f ore" % (sec / 3600.0)
+    return tr("%.1f hours") % (sec / 3600.0)
 
 
 def _map_manual(manual: Optional[Manual], offset_f: int, fps: float,

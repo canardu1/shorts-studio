@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QButtonGroup, QComboBox, QDialog, QGridLayout, QH
 
 from . import thumbnail as T
 from .preview import to_qimage
+from ..i18n import tr
 
 PREVIEW = {"16:9": (640, 360), "9:16": (270, 480)}
 
@@ -18,18 +19,18 @@ PREVIEW = {"16:9": (640, 360), "9:16": (270, 480)}
 class ThumbDialog(QDialog):
     def __init__(self, parent, variants, text, hl, renderer, out_dir, stem):
         super().__init__(parent)
-        self.setWindowTitle("Copertine")
+        self.setWindowTitle(tr("Thumbnails"))
         self.variants, self.renderer, self.out_dir, self.stem = variants, renderer, out_dir, stem
         lay = QVBoxLayout(self)
         row = QHBoxLayout()
-        row.addWidget(QLabel("Testo"))
+        row.addWidget(QLabel(tr("Text")))
         self.text = QLineEdit(text)
-        self.text.setPlaceholderText("2-4 parole forti")
+        self.text.setPlaceholderText(tr("2-4 strong words"))
         row.addWidget(self.text, 1)
-        row.addWidget(QLabel("Parola colorata"))
+        row.addWidget(QLabel(tr("Highlighted word")))
         self.hl = QSpinBox()
         self.hl.setRange(0, 12)
-        self.hl.setSpecialValueText("nessuna")
+        self.hl.setSpecialValueText(tr("none"))
         self.hl.setValue((hl + 1) if hl is not None else 0)
         row.addWidget(self.hl)
         self.aspect = QComboBox()
@@ -46,7 +47,7 @@ class ThumbDialog(QDialog):
             b = QToolButton()
             b.setCheckable(True)
             b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-            b.setText(names.get(v.style, v.style))
+            b.setText(tr(names.get(v.style, v.style)))
             self.group.addButton(b, i)
             grid.addWidget(b, i // 2, i % 2)
             self.buttons.append(b)
@@ -54,11 +55,11 @@ class ThumbDialog(QDialog):
             self.buttons[0].setChecked(True)
         lay.addLayout(grid)
         bot = QHBoxLayout()
-        bot.addWidget(QLabel("Scegli una copertina e premi “Salva”"))
+        bot.addWidget(QLabel(tr("Pick a thumbnail and press “Save”")))
         bot.addStretch(1)
-        save_all = QPushButton("Salva tutte")
+        save_all = QPushButton(tr("Save all"))
         save_all.clicked.connect(self._save_all)
-        save = QPushButton("Salva")
+        save = QPushButton(tr("Save"))
         save.setDefault(True)
         save.clicked.connect(self._save_selected)
         bot.addWidget(save_all)
@@ -102,8 +103,9 @@ class ThumbDialog(QDialog):
         if i < 0:
             return
         p = self.save_variant(i)
-        QMessageBox.information(self, "Copertine", "Salvata: %s" % p)
+        QMessageBox.information(self, tr("Thumbnails"), tr("Saved: %s") % p)
 
     def _save_all(self):
         ps = [self.save_variant(i) for i in range(len(self.variants))]
-        QMessageBox.information(self, "Copertine", "Salvate %d copertine in %s" % (len(ps), self.out_dir))
+        QMessageBox.information(self, tr("Thumbnails"),
+                                tr("Saved %d thumbnails to %s") % (len(ps), self.out_dir))

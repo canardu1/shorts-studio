@@ -8,8 +8,8 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-LOOKS = [("Naturale", "none"), ("Caldo", "warm"), ("Freddo", "cool"), ("Cinematico (teal & orange)", "cine"),
-         ("Pop (contrasto e colore)", "pop"), ("Vintage", "vintage"), ("Bianco e nero", "bw")]
+LOOKS = [("Natural", "none"), ("Warm", "warm"), ("Cool", "cool"), ("Cinematic (teal & orange)", "cine"),
+         ("Pop (contrast & colour)", "pop"), ("Vintage", "vintage"), ("B&W", "bw")]
 
 
 def _smoothstep(x):

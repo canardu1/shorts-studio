@@ -18,6 +18,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
+
+from .i18n import tr
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
@@ -141,7 +143,7 @@ class FaceRestorer:
         from .detect import FaceDetector
         self.model = MODELS[key]
         if not is_available(key):
-            raise FileNotFoundError("modello %s non scaricato" % self.model.file)
+            raise FileNotFoundError(tr("model %s not downloaded") % self.model.file)
         opts = ort.SessionOptions()
         opts.log_severity_level = 3
         self.sess = ort.InferenceSession(model_path(key), opts, providers=["CPUExecutionProvider"])

@@ -14,11 +14,13 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from ..i18n import tr
+
 SEG_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx"
 SEG_FILE = "u2netp.onnx"
 
-STYLES = [("pop", "Pop (sfondo sfocato)"), ("colore", "Colore acceso"), ("zoom", "Primo piano"),
-          ("neon", "Scuro con alone")]
+STYLES = [("pop", "Pop (blurred background)"), ("colore", "Bright colour"), ("zoom", "Close-up"),
+          ("neon", "Dark with glow")]
 
 SIZES = {"16:9": (1280, 720), "9:16": (1080, 1920)}
 
@@ -399,11 +401,11 @@ def prepare(path: str, analysis, count: int = 4, progress=None, log=print) -> Li
     seg = None
     try:
         if not seg_available():
-            log("Copertine: scarico il modello di scontorno (4,6 MB, una volta sola)…")
+            log(tr("Thumbnails: downloading the cutout model (4.6 MB, once)…"))
             download_seg()
         seg = Segmenter()
     except Exception as exc:   # offline / no onnxruntime: soft head-and-shoulders shape
-        log("Copertine: scontorno non disponibile (%s), uso una sagoma morbida" % exc)
+        log(tr("Thumbnails: cutout unavailable (%s), using a soft shape") % exc)
     out = []
     styles = [k for k, _ in STYLES]
     for i in range(count):

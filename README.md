@@ -17,18 +17,64 @@ Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for $15–30 a 
 
 ## Features
 
-| | |
-|---|---|
-| **Smart reframe** | Follows the main face shot by shot (no jitter between two people), or cuts to *whoever is talking*. Pick the person to follow from thumbnails; drag the crop to correct any moment by hand. Split screen for two-person podcasts. 9:16, 4:5, 1:1 and 16:9 from one analysis. |
-| **Auto edit** | Removes pauses, breaths, filler words (*uhm, ehm*) and repeated takes. A "best moments" finder proposes 30–60 s clips from a long video. |
-| **Captions** | Whisper transcription (runs locally), TikTok-style word-by-word highlight, built-in subtitle editor with find & replace, English translation or bilingual captions. |
-| **Look & feel** | Punch-in on phrases, handheld drift, crash zooms, whip/zoom/glitch transitions; colour looks and auto white balance; stabilisation; skin-tone normalisation (fixes "lobster red" camera skin); beauty (smoothing, blemishes, wrinkles). |
-| **Faces** | AI face restoration (GFPGAN, GPEN, CodeFormer) for soft or compressed footage. |
-| **Audio** | One-click cinematic dialogue chain (denoise, de-ess, de-reverb, EQ, −14 LUFS), background music ducked under the voice. Hear the treated audio live in the preview, with A/B. |
-| **Publishing** | Hook title for the first seconds, logo watermark, closing call to action, cover image, YouTube/Shorts thumbnails (subject cut-out, outline, big text), title/description/hashtags drafted from the transcript. |
-| **Workflow** | Live preview with timeline, safe-zone overlay for TikTok/Reels/Shorts, undo/redo, projects with autosave, presets, disk cache, hardware encoding (VideoToolbox), light proxies for heavy 4K/HEVC camera files. |
+### Reframe
+- **Face-following 16:9 → 9:16** crop with smooth "camera operator" motion (dead zone, smoothing, max pan speed) and a hard jump at every cut.
+- **Shot detection:** close-ups and wide shots are recognised automatically; wide shots get a punch-in so the speaker fills the vertical frame.
+- **Who to follow:** the main person, locked per shot (no jitter between two people), or **whoever is talking** (from mouth movement).
+- **Person picker:** thumbnails of everyone in the video, matched across shots with face recognition — tick the person to follow, even when they appear in both close-up and wide shots.
+- **Hand corrections:** drag the crop in the preview to re-aim from any frame, "auto from here" to hand control back.
+- **Split screen** for two-person podcasts (both stacked when both are in shot).
+- **Multi-format:** 9:16, 4:5, 1:1 and 16:9 from one analysis.
 
-The app's interface is currently in **Italian** (English UI is planned — contributions welcome).
+### Automatic editing
+- **Cut pauses** with an adaptive silence threshold, **cut breaths**, **cut filler words** (*uhm, ehm, uh…*) and **cut retakes** (repeated lines — the last take wins).
+- **Best moments finder:** proposes the strongest 30–60 s clips of a long video (dense speech, a hook in the first sentence, ends on a full sentence).
+- **Clip ranges** and **batch processing** of a whole folder.
+
+### Captions
+- **Whisper transcription** running locally, cached per file.
+- **TikTok-style word-by-word captions** with the spoken word highlighted, or classic lines; colour, position, uppercase.
+- **Subtitle editor:** fix misheard words, find & replace (names, jargon), timings re-spread automatically, restore the original.
+- **English translation** or **bilingual** captions (original + English).
+
+### Camera moves & effects
+- **Punch-in** on every new phrase.
+- **Handheld** drift, **slow push-in**, **crash zoom** on strong words, **impact shake** on voice peaks.
+- **Transitions** on cuts: whip pan, zoom, glitch or random.
+- **Stabilisation** (optical flow, per shot).
+
+### Image
+- **Face restoration** with AI models: GPEN-256 (fast), GPEN-512, GFPGAN 1.4, CodeFormer (best quality).
+- **Skin-tone normalisation:** fixes skin that the camera renders too red or saturated, touching only skin pixels; exportable as a `.cube` LUT for Resolve.
+- **Beauty:** skin smoothing, blemish removal, wrinkle and under-eye softening — eyes, lips, beard and hair stay sharp.
+- **Colour looks:** warm, cool, cinema, pop, vintage, black & white, plus **auto white balance** and exposure.
+- **Enhance:** fast sharpening or Real-ESRGAN AI upscaling of the crop.
+
+### Audio
+- **Cinematic dialogue** in one click: denoise, de-ess, de-reverb, rumble/boxiness cut, compression, warmth/presence/air EQ, −14 LUFS.
+- **Background music** ducked under the voice with a sidechain compressor.
+- **Live preview of the treated audio** while you tune, with **A/B** against the original.
+
+### Publishing
+- **Hook title** on screen for the first seconds (automatic from the first sentence, or your own).
+- **Logo / watermark** and a closing **call-to-action** card.
+- **Click-worthy thumbnails** for YouTube (16:9) and Shorts (9:16): best expressive frame, subject cut-out with outline and shadow, 4 styles, 2–4 big words with one highlighted.
+- **Cover image** for each short.
+- **Title, description and hashtags** drafted from the transcript.
+
+### Workflow
+- **Live preview** with source and result side by side, and a timeline showing cuts, shots and corrections.
+- **Safe-zone overlay** for the TikTok, Reels and Shorts buttons.
+- **Undo / redo**, **projects** (`.shorts`) with **autosave** and session restore.
+- **Presets** (Interview, 2-person podcast, split-screen podcast, Vlog, slow PC) plus your own.
+- **Disk cache** for face analysis, transcripts and stabilisation: re-opening a video is instant.
+- **Proxies** for heavy 4K / HEVC 10-bit camera files, so playback stays smooth.
+- **Hardware encoding** (VideoToolbox on the Mac).
+
+### DaVinci Resolve scripts (free version included)
+Face Reframe (non-destructive Fusion keyframes or render), Cut Pauses, Cut Fillers, Cut Breaths, Cut Retakes, Auto Subtitles, Punch In, Cinematic Audio, Normalize Audio, Normalize Color, Enhance, Duck Music, Sync Audio (align external recorder audio), Auto Markers, Split At Cuts and a one-dialog **Shorts Pipeline**.
+
+The app's interface is in **English** by default; Italian is available from the Export tab (**UI language**, applies on restart).
 
 ## Quick start
 

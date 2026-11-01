@@ -74,7 +74,7 @@ def test_preview_cache_reused(talking_clip, tmp_path):
     cache.put(talking_clip, s.reframe, analyze_video(talking_clip, stride=s.reframe.stride))
     logs = []
     run_job(talking_clip, s, lambda *_: None, logs.append, cache=cache)
-    assert any("anteprima" in line for line in logs)
+    assert any("preview" in line for line in logs)
 
 
 def test_gui_smoke(talking_clip, tmp_path, monkeypatch):

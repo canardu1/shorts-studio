@@ -21,7 +21,7 @@ def test_first_sentence_and_social_texts():
     t = social.make_texts(words, lang="it")
     assert t["title"].startswith("Perché") and "#shorts" in t["hashtags"] and "#cucina" in t["hashtags"]
     assert "Seguimi" in t["description"]
-    assert "TITOLO" in social.to_text(t)
+    assert "TITLE" in social.to_text(t)
 
 
 def test_overlays_hook_logo_cta(tmp_path):

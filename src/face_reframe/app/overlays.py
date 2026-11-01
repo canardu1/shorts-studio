@@ -10,6 +10,8 @@ from typing import Callable, List, Optional, Sequence
 
 import numpy as np
 
+from ..i18n import tr
+
 from .jobs import blend
 
 TitleRenderer = Callable[[str, int], np.ndarray]
@@ -96,7 +98,7 @@ class Logo:
         import cv2
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
         if img is None:
-            raise IOError("logo non leggibile: %s" % path)
+            raise IOError(tr("unreadable logo: %s") % path)
         if img.ndim == 2:
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGRA)
         elif img.shape[2] == 3:

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QHBoxLayou
                                QVBoxLayout)
 
 from . import subedit
+from ..i18n import tr
 
 
 def _ts(t: float) -> str:
@@ -26,7 +27,7 @@ class SubtitleEditor(QDialog):
                  settings: Callable[[], tuple], seek: Callable[[float], None],
                  now: Callable[[], Optional[float]], restore: Callable[[], Optional[list]]):
         super().__init__(parent)
-        self.setWindowTitle("Sottotitoli — " + title)
+        self.setWindowTitle(tr("Captions — ") + title)
         self.resize(640, 640)
         self.get_words, self.set_words = get_words, set_words
         self.settings, self.seek, self.now, self.restore = settings, seek, now, restore
@@ -34,20 +35,20 @@ class SubtitleEditor(QDialog):
         self._filling = False
 
         lay = QVBoxLayout(self)
-        tip = QLabel("Doppio clic su una riga per correggerla (Invio per confermare, testo vuoto = elimina "
-                     "la riga). Clic su una riga per vederla nell'anteprima.")
+        tip = QLabel(tr("Double-click a row to fix it (Enter to confirm, empty text = deletes "
+                        "the row). Click a row to see it in the preview."))
         tip.setWordWrap(True)
         tip.setObjectName("hint")
         lay.addWidget(tip)
 
         fr = QHBoxLayout()
         self.find = QLineEdit()
-        self.find.setPlaceholderText("Trova (es. un nome sbagliato)")
+        self.find.setPlaceholderText(tr("Find (e.g. a misspelled name)"))
         self.repl = QLineEdit()
-        self.repl.setPlaceholderText("Sostituisci con")
-        self.whole = QCheckBox("Parola intera")
+        self.repl.setPlaceholderText(tr("Replace with"))
+        self.whole = QCheckBox(tr("Whole word"))
         self.whole.setChecked(True)
-        go = QPushButton("Sostituisci tutto")
+        go = QPushButton(tr("Replace all"))
         go.clicked.connect(self._replace_all)
         fr.addWidget(self.find, 1)
         fr.addWidget(self.repl, 1)
@@ -56,7 +57,7 @@ class SubtitleEditor(QDialog):
         lay.addLayout(fr)
 
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Inizio", "Fine", "Testo"])
+        self.table.setHorizontalHeaderLabels([tr("Start"), tr("End"), tr("Text")])
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -72,9 +73,9 @@ class SubtitleEditor(QDialog):
         bot = QHBoxLayout()
         self.count = QLabel("")
         self.count.setObjectName("hint")
-        rest = QPushButton("Ripristina trascrizione originale")
+        rest = QPushButton(tr("Restore original transcript"))
         rest.clicked.connect(self._restore)
-        close = QPushButton("Chiudi")
+        close = QPushButton(tr("Close"))
         close.clicked.connect(self.close)
         bot.addWidget(self.count, 1)
         bot.addWidget(rest)
@@ -101,7 +102,7 @@ class SubtitleEditor(QDialog):
                     it.setForeground(QBrush(QColor("#8b93a1")))
                 self.table.setItem(r, c, it)
         self._filling = False
-        self.count.setText("%d righe · %d parole" % (len(self._rows), len(words)))
+        self.count.setText(tr("%d lines · %d words") % (len(self._rows), len(words)))
         if keep_row is not None and self._rows:
             self.table.selectRow(min(keep_row, len(self._rows) - 1))
 
@@ -126,11 +127,11 @@ class SubtitleEditor(QDialog):
         if n:
             self.set_words(words)
             self.refresh()
-        QMessageBox.information(self, "Sottotitoli", "%d righe modificate." % n)
+        QMessageBox.information(self, tr("Captions"), tr("%d lines edited.") % n)
 
     def _restore(self):
-        if QMessageBox.question(self, "Sottotitoli", "Annullare tutte le correzioni e tornare alla "
-                                "trascrizione di Whisper?") != QMessageBox.Yes:
+        if QMessageBox.question(self, tr("Captions"), tr("Discard all corrections and go back to the "
+                                "Whisper transcript?")) != QMessageBox.Yes:
             return
         orig = self.restore()
         if orig is not None:

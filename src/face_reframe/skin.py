@@ -59,10 +59,11 @@ class SkinCorrection:
         return abs(self.rot) > 0.5 or abs(self.scale - 1.0) > 0.02
 
     def describe(self) -> str:
+        from .i18n import tr
         if not self.needed:
-            return ("pelle misurata: tinta %.0f°, saturazione %.0f — già naturale, nessuna correzione"
+            return (tr("skin measured: hue %.0f°, saturation %.0f — already natural, no correction")
                     % (self.hue, self.chroma))
-        return ("pelle misurata: tinta %.0f° → %.0f° (naturale %.0f–%.0f°), saturazione %.0f → %.0f"
+        return (tr("skin measured: hue %.0f° → %.0f° (natural %.0f–%.0f°), saturation %.0f → %.0f")
                 % (self.hue, self.hue + self.rot, NATURAL_HUE[0], NATURAL_HUE[1],
                    self.chroma, self.chroma * self.scale))
 

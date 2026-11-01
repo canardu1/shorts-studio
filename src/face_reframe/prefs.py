@@ -40,7 +40,7 @@ DEFAULTS = {
     "markers": {
         "scope": "all",
         "track_index": 1,
-        "keywords": "taglia,rifacciamo,retake,daccapo,ricominciamo",
+        "keywords": "taglia,rifacciamo,retake,daccapo,ricominciamo,cut,again,redo",
         "topics": True,
         "min_pause": 4.0,
     },

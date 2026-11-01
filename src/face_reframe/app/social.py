@@ -48,4 +48,4 @@ def make_texts(words: Sequence, hook: str = "", lang: Optional[str] = None) -> D
 
 
 def to_text(t: Dict[str, str]) -> str:
-    return "TITOLO\n%s\n\nDESCRIZIONE\n%s\n\nHASHTAG\n%s\n" % (t["title"], t["description"], t["hashtags"])
+    return "TITLE\n%s\n\nDESCRIPTION\n%s\n\nHASHTAGS\n%s\n" % (t["title"], t["description"], t["hashtags"])
