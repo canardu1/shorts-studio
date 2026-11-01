@@ -4,12 +4,14 @@
 
 Face-following reframe, automatic jump cuts, word-by-word captions, cinematic audio, face restoration, skin-tone fix, social camera moves and click-worthy thumbnails, in one desktop app. The same engine also ships as **free scripts for DaVinci Resolve** (they work on the free version).
 
-<!-- Demo media: see docs/media/README.md to (re)generate these from your own footage -->
+<!-- Demo media: see docs/media/README.md to (re)generate these from your own footage,
+     then uncomment the block below.
 <p align="center">
   <img src="docs/media/reframe.gif" width="32%" alt="Face-following 16:9 → 9:16 reframe">
   <img src="docs/media/captions.gif" width="32%" alt="Word-by-word captions and punch-in">
   <img src="docs/media/thumbnails.jpg" width="32%" alt="Generated thumbnails">
 </p>
+-->
 
 ## Why
 
