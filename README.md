@@ -49,6 +49,7 @@ Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for $15–30 a 
 - **Beauty:** skin smoothing, blemish removal, wrinkle and under-eye softening — eyes, lips, beard and hair stay sharp.
 - **Colour looks:** warm, cool, cinema, pop, vintage, black & white, plus **auto white balance** and exposure.
 - **Enhance:** fast sharpening or Real-ESRGAN AI upscaling of the crop.
+- **Blur background:** portrait-lens look — a recurrent RVM matte keeps the subject sharp and blurs the rest.
 
 ### Audio
 - **Cinematic dialogue** in one click: denoise, de-ess, de-reverb, rumble/boxiness cut, compression, warmth/presence/air EQ, −14 LUFS.

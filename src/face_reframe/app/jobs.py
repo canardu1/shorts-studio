@@ -109,6 +109,8 @@ class JobSettings:
     auto_wb: bool = False
     stabilize: bool = False
     stab_amount: float = 0.8
+    bg_blur: float = 0.0
+    """Blur strength behind the person (RVM matte); 0 = off."""
     encoder: str = "auto"
     """``auto`` (hardware on a Mac when available), ``hardware`` or ``software``."""
     preset: str = "veryfast"
@@ -839,11 +841,21 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                 burner = CaptionBurner(events, fps, out_w, out_h, caption_renderer,
                                        0.5 if split is not None else s.caption_pos, s.caption_style,
                                        second_words=second)
+            hooks = []
+            if s.bg_blur > 0:
+                from .rvm import build as build_bg_blur
+                bg = build_bg_blur(s.bg_blur, step(tr("Background blur")), log)
+                if bg is not None:
+                    hooks.append(bg)          # blur first: don't soften captions/overlays
+            if burner is not None:
+                hooks.append(burner)
             if ov is not None:
                 from .overlays import Chain, build as build_overlays
-                parts = build_overlays(ov, hook_text, analysis.frame_count, fps, out_w, out_h, title_renderer, log)
-                if parts:
-                    burner = Chain([burner] + parts)
+                hooks += build_overlays(ov, hook_text, analysis.frame_count, fps, out_w, out_h,
+                                        title_renderer, log)
+            if hooks:
+                from .overlays import Chain
+                burner = hooks[0] if len(hooks) == 1 else Chain(hooks)
             log(tr("Render %s %dx%d…") % (aspect, out_w, out_h))
             tmp = os.path.join(work, "out.mp4")
             vargs = video_args(s, out_w, out_h)

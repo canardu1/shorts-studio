@@ -558,4 +558,18 @@ _IT = {
     "Speech detection": "Rilevamento parlato",
     "Neural (Silero VAD)": "Neurale (Silero VAD)",
     "Levels (dB)": "Livelli (dB)",
+    "Beauty": "Bellezza",
+    "Colour": "Colore",
+    "Sharpness & upscale": "Nitidezza e upscale",
+    "Closing": "Chiusura",
+    "Background": "Sfondo",
+    "Blur background": "Sfoca lo sfondo",
+    "Neural person matte (RVM): keeps the subject sharp and blurs everything else, like a portrait lens. The 14 MB model downloads on first export.":
+        "Matte neurale della persona (RVM): il soggetto resta a fuoco e tutto il resto si sfoca, come un obiettivo ritratto. Il modello da 14 MB si scarica al primo export.",
+    "Background blur": "Sfondo sfocato",
+    "Background blur: downloading the matting model (14 MB, once)…":
+        "Sfondo sfocato: scarico il modello di scontorno (14 MB, solo la prima volta)…",
+    "  background blur unavailable (%s)": "  sfondo sfocato non disponibile (%s)",
+    " · background blur: the model downloads on first export":
+        " · sfondo sfocato: il modello si scarica al primo export",
 }

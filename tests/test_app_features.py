@@ -210,3 +210,43 @@ def test_job_with_extras(two_people, tmp_path):
     base = os.path.splitext(outs[0])[0]
     assert os.path.exists(base + "_cover.jpg") and os.path.exists(base + "_texts.txt"), logs
     assert any("Colour: look cine" in l for l in logs) and any("encoder: x264" in l for l in logs)
+
+
+def test_blur_background_hook():
+    """Fake matte: subject area stays sharp, the rest is blurred."""
+    import cv2
+    from face_reframe.app.rvm import BlurBackground
+
+    class FakeMatter:
+        def __init__(self):
+            self.resets = 0
+
+        def reset(self):
+            self.resets += 1
+
+        def __call__(self, img):
+            h, w = img.shape[:2]
+            a = np.zeros((h, w), np.float32)
+            cv2.circle(a, (w // 2, h // 2), min(h, w) // 8, 1.0, -1)
+            return a
+
+    h, w = 240, 360
+    frame = np.random.RandomState(0).randint(0, 255, (h, w, 3), np.uint8)
+    m = FakeMatter()
+    hook = BlurBackground(m, 0.6)
+    out = hook(0, frame)
+    cy, cx = h // 2, w // 2
+    tex = lambda x: float(np.abs(np.diff(x.astype(np.float32), axis=1)).mean())
+    inside = tex(out[cy - 20:cy + 20, cx - 20:cx + 20])
+    outside = tex(out[cy - 20:cy + 20, 10:40])
+    assert inside > 3 * outside
+    assert m.resets == 1            # first call resets the recurrent state
+    hook(1, frame)
+    assert m.resets == 1
+    hook(0, frame)                  # seek backwards resets
+    assert m.resets == 2
+
+
+def test_bg_blur_settings():
+    s = JobSettings()
+    assert s.bg_blur == 0.0

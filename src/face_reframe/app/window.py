@@ -246,6 +246,7 @@ class MainWindow(QMainWindow):
         self._skin_view = None       # (key, correction at the current strength)
         self._restorer = None        # preview face restorer (built in the background)
         self._restorer_key = None
+        self._matter = None          # preview person matte for background blur
         self._restore_pending = None
 
         self.play_timer = QTimer(self)
@@ -597,7 +598,7 @@ class MainWindow(QMainWindow):
         W["beauty_smooth"] = dspin(0, 1, 0.05, 0.5)
         W["beauty_blemish"] = dspin(0, 1, 0.05, 0.5)
         W["beauty_wrinkles"] = dspin(0, 1, 0.05, 0.4)
-        f.addRow(QLabel("<b>Beauty</b>"))
+        f.addRow(QLabel("<b>%s</b>" % tr("Beauty")))
         f.addRow(W["beauty"])
         f.addRow(tr("Skin smoothing"), W["beauty_smooth"])
         f.addRow(tr("Spots and blemishes"), W["beauty_blemish"])
@@ -615,7 +616,7 @@ class MainWindow(QMainWindow):
         W["auto_wb"] = QCheckBox(tr("Auto white balance & exposure"))
         W["stabilize"] = QCheckBox(tr("Stabilize shaky footage"))
         W["stab_amount"] = dspin(0.1, 1.0, 0.05, 0.8)
-        f.addRow(QLabel("<b>Colore</b>"))
+        f.addRow(QLabel("<b>%s</b>" % tr("Colour")))
         f.addRow(tr("Look"), W["look"])
         f.addRow(tr("Look strength"), W["look_strength"])
         f.addRow(W["auto_wb"])
@@ -624,7 +625,13 @@ class MainWindow(QMainWindow):
         f.addRow(W["stabilize"])
         f.addRow(tr("Strength"), W["stab_amount"])
         f.addRow(hint(tr("Measures camera shake and compensates by shifting the crop (plus a slight rotation). The first run analyses the whole video.")))
-        f.addRow(QLabel("<b>Nitidezza e upscale</b>"))
+        f.addRow(QLabel("<b>%s</b>" % tr("Background")))
+        W["bg_blur"] = QCheckBox(tr("Blur background"))
+        W["bg_blur_amount"] = dspin(0.1, 1.5, 0.05, 0.6)
+        f.addRow(W["bg_blur"])
+        f.addRow(tr("Strength"), W["bg_blur_amount"])
+        f.addRow(hint(tr("Neural person matte (RVM): keeps the subject sharp and blurs everything else, like a portrait lens. The 14 MB model downloads on first export.")))
+        f.addRow(QLabel("<b>%s</b>" % tr("Sharpness & upscale")))
         f.addRow(tr("Enhancement"), W["enhance"])
         f.addRow(tr("Sharpening"), W["sharpen"])
         f.addRow(tr("Extra on face"), W["face_boost"])
@@ -718,10 +725,10 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Title"), W["hook"])
         f.addRow(tr("Text"), self.hook_edit)
         f.addRow(tr("Duration"), W["hook_dur"])
-        f.addRow(QLabel("<b>Chiusura</b>"))
+        f.addRow(QLabel("<b>%s</b>" % tr("Closing")))
         f.addRow(tr("Closing CTA"), self.cta_edit)
         f.addRow(tr("Duration"), W["cta_dur"])
-        f.addRow(QLabel("<b>Logo</b>"))
+        f.addRow(QLabel("<b>%s</b>" % tr("Logo")))
         f.addRow(tr("Image (PNG)"), lrow)
         f.addRow(tr("Position"), W["logo_corner"])
         f.addRow(tr("Size"), W["logo_size"])
@@ -872,6 +879,7 @@ class MainWindow(QMainWindow):
             cover=v("cover"), social=v("social"), sub_lang=v("sub_lang"),
             look=v("look"), look_strength=v("look_strength"), auto_wb=v("auto_wb"),
             stabilize=v("stabilize"), stab_amount=v("stab_amount"), encoder=v("encoder"),
+            bg_blur=v("bg_blur_amount") if v("bg_blur") else 0.0,
             restore=v("restore"), restore_blend=v("restore_blend"), restore_fidelity=v("restore_fidelity"),
             formats=formats, layout=v("layout"), punch=v("punch"), punch_zoom=v("punch_zoom"),
             cut_pauses=v("cut_pauses"),
@@ -1019,6 +1027,7 @@ class MainWindow(QMainWindow):
         for k in ("sharpen", "face_boost"):
             self.w[k].setEnabled(v("enhance") != "off")
         self.w["restore_blend"].setEnabled(v("restore") != "off")
+        self.w["bg_blur_amount"].setEnabled(v("bg_blur"))
         self.w["skin_strength"].setEnabled(v("skin"))
         for k in ("beauty_smooth", "beauty_blemish", "beauty_wrinkles"):
             self.w[k].setEnabled(v("beauty"))
@@ -1460,6 +1469,15 @@ class MainWindow(QMainWindow):
                 if ov.hook != "off" else ""
             parts += build_overlays(ov, hook, self.reader.count, fps, ow, oh, self._title_renderer(),
                                     lambda *_: None)
+        if s.bg_blur > 0:
+            from .rvm import BlurBackground, rvm_available
+            if rvm_available():
+                if self._matter is None:
+                    from .rvm import Matter
+                    self._matter = Matter()
+                parts.insert(0, BlurBackground(self._matter, s.bg_blur))  # first: don't soften text
+            else:
+                info += tr(" · background blur: the model downloads on first export")
         if parts:
             from .overlays import Chain
             self._burner = Chain(parts)
