@@ -1,7 +1,8 @@
 
 import numpy as np
+import pytest
 
-from face_reframe.silence import SAMPLE_RATE, SpeechParams, speech_intervals
+from face_reframe.silence import SAMPLE_RATE, SpeechParams, speech_intervals, vad_probs
 
 
 def synth_pcm(segments, sr=SAMPLE_RATE):
@@ -14,9 +15,13 @@ def synth_pcm(segments, sr=SAMPLE_RATE):
     return pcm
 
 
+# the tone tests exercise the RMS-level engine: synthetic tones are not speech to the VAD
+DB = SpeechParams(vad=False)
+
+
 def test_finds_bursts_and_keeps_short_pauses():
     pcm = synth_pcm([(1.0, 2.0), (3.2, 2.0), (6.0, 2.0)])
-    spans = speech_intervals(pcm, SpeechParams(min_pause=0.35))
+    spans = speech_intervals(pcm, SpeechParams(vad=False, min_pause=0.35))
     # the 0.2s pause at 3.0s is kept -> first two bursts merge
     assert len(spans) == 2
     assert spans[0][0] < 1.1 and spans[0][1] > 5.0
@@ -25,7 +30,7 @@ def test_finds_bursts_and_keeps_short_pauses():
 
 def test_long_pauses_are_cut():
     pcm = synth_pcm([(0.5, 1.0), (5.0, 1.0)])
-    spans = speech_intervals(pcm, SpeechParams(min_pause=0.35))
+    spans = speech_intervals(pcm, SpeechParams(vad=False, min_pause=0.35))
     assert len(spans) == 2
 
 
@@ -37,15 +42,32 @@ def test_all_silence_returns_nothing():
 def test_tone_only_returns_whole_clip():
     t = np.arange(SAMPLE_RATE * 5) / SAMPLE_RATE
     pcm = 0.3 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
-    spans = speech_intervals(pcm)
+    spans = speech_intervals(pcm, DB)
     assert len(spans) == 1 and spans[0][1] > 4.9
 
 
 def test_hysteresis_keeps_soft_word_tails():
-    from face_reframe.silence import SAMPLE_RATE
     win = int(0.025 * SAMPLE_RATE)
     profile = np.concatenate([np.full(100, -40.0), np.full(40, -20.0),
                               np.full(20, -35.0), np.full(40, -40.0)])
     pcm = np.concatenate([np.full(win, 10 ** (db / 20)) for db in profile]).astype(np.float32)
-    spans = speech_intervals(pcm, SpeechParams(margin_db=8.0, release_db=4.0, padding=0.16))
+    spans = speech_intervals(pcm, SpeechParams(vad=False, margin_db=8.0, release_db=4.0, padding=0.16))
     assert spans and spans[0][1] > 4.0  # tail at -35 dB kept, cut after it
+
+
+HAS_VAD = vad_probs(np.zeros(1024, np.float32)) is not None
+
+
+@pytest.mark.skipif(not HAS_VAD, reason="silero VAD onnx not available")
+def test_vad_rejects_loud_noise():
+    """Hiss/fan noise must not count as speech (the dB engine keeps it all)."""
+    noise = (0.05 * np.random.RandomState(0).randn(SAMPLE_RATE * 8)).astype(np.float32)
+    assert speech_intervals(noise) == []
+    assert speech_intervals(noise, DB) != []
+
+
+@pytest.mark.skipif(not HAS_VAD, reason="silero VAD onnx not available")
+def test_vad_silence_and_kill_switch(monkeypatch):
+    assert speech_intervals(np.zeros(SAMPLE_RATE * 3, np.float32)) == []
+    monkeypatch.setenv("SHORTS_STUDIO_NO_VAD", "1")
+    assert vad_probs(np.zeros(1024, np.float32)) is None

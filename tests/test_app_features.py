@@ -184,6 +184,7 @@ def test_job_with_all_moves(two_people, tmp_path):
     path, _ = two_people
     m = MotionSettings(handheld=True, push=True, crash=True, shake=True, transition="random", min_gap=0.3)
     s = JobSettings(output_height=640, output_dir=str(tmp_path), motion=m, cut_pauses=True)
+    s.speech.vad = False
     logs = []
     outs = run_job(path, s, lambda *_: None, logs.append, cache=AnalysisCache(disk=False))
     assert os.path.exists(outs[0]) and any("moves" in l for l in logs), logs

@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from face_reframe.cut import main
-from face_reframe.silence import SAMPLE_RATE, clip_intervals
+from face_reframe.silence import SAMPLE_RATE, SpeechParams, clip_intervals
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
 
@@ -33,14 +33,15 @@ def make_talk(path):
 def test_clip_intervals_maps_frames(tmp_path):
     src = str(tmp_path / "talk.mp4")
     make_talk(src)
-    spans = clip_intervals(src, 0, 300, 25.0)
+    spans = clip_intervals(src, 0, 300, 25.0, SpeechParams(vad=False))  # tone bursts aren't speech to the VAD
     starts = [round(a / 25.0, 1) for a, _ in spans]
     assert starts == pytest.approx([0.9, 4.9, 8.9], abs=0.2)
 
 
-def test_cli_jump_cut(tmp_path):
+def test_cli_jump_cut(tmp_path, monkeypatch):
     src, out = str(tmp_path / "talk.mp4"), str(tmp_path / "cut.mp4")
     make_talk(src)
+    monkeypatch.setenv("SHORTS_STUDIO_NO_VAD", "1")  # tone bursts aren't speech to the VAD
     assert main([src, "-o", out]) == 0
     probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                             "-of", "csv=p=0", out], capture_output=True, text=True)

@@ -27,7 +27,7 @@ Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for $15–30 a 
 - **Multi-format:** 9:16, 4:5, 1:1 and 16:9 from one analysis.
 
 ### Automatic editing
-- **Cut pauses** with an adaptive silence threshold, **cut breaths**, **cut filler words** (*uhm, ehm, uh…*) and **cut retakes** (repeated lines — the last take wins).
+- **Cut pauses** with a neural voice-activity detector (Silero VAD, bundled — falls back to an adaptive silence threshold without it), **cut breaths**, **cut filler words** (*uhm, ehm, uh…*) and **cut retakes** (repeated lines — the last take wins).
 - **Best moments finder:** proposes the strongest 30–60 s clips of a long video (dense speech, a hook in the first sentence, ends on a full sentence).
 - **Clip ranges** and **batch processing** of a whole folder.
 

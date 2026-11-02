@@ -56,6 +56,7 @@ def _probe(path):
 
 def test_run_job_cut_enhance(talking_clip, tmp_path):
     s = JobSettings(output_height=1280, cut_pauses=True, output_dir=str(tmp_path))
+    s.speech.vad = False  # synthetic tone: exercise the RMS engine
     s.enhance.mode = "fast"
     stages, logs = [], []
     out = run_job(talking_clip, s, lambda st, f: stages.append(st), logs.append,
@@ -81,6 +82,7 @@ def test_gui_smoke(talking_clip, tmp_path, monkeypatch):
     pytest.importorskip("PySide6")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("SHORTS_STUDIO_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("SHORTS_STUDIO_NO_VAD", "1")  # synthetic tone: exercise the RMS engine
     from PySide6.QtWidgets import QApplication
     from face_reframe.app.captions_qt import make_renderer
     from face_reframe.app.window import MainWindow, apply_theme
@@ -211,6 +213,7 @@ def test_gui_skip_cuts_with_treated_audio_never_sticks(talking_clip, tmp_path, m
         pytest.skip("QtMultimedia not installed")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("SHORTS_STUDIO_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("SHORTS_STUDIO_NO_VAD", "1")  # synthetic tone: exercise the RMS engine
     import time
     from PySide6.QtWidgets import QApplication
     from face_reframe.app.window import MainWindow
