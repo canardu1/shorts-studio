@@ -31,7 +31,7 @@ class EnhanceRunOptions:
 
 def _params(mode: str) -> EnhanceOptions:
     return EnhanceOptions(mode=_MODES.get(mode, "fast"),
-                          ai_fraction=1.0 if mode == "ai-hq" else 0.5)
+                          ai_fraction=1.0 if mode == "ai-hq" else 0.5, ai_native=True)
 
 
 def _entry(media_pool_item, start, count, media_type, rec):

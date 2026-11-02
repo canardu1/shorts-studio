@@ -78,9 +78,17 @@ The app's interface is in **English** by default; Italian is available from the 
 
 ## Quick start
 
-### Shorts Studio (macOS; Linux works, Windows untested)
+### Shorts Studio on macOS — one command
 
-Requires Python 3.9+ and ffmpeg (bundled automatically via `imageio-ffmpeg`).
+Open Terminal and paste:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/canardu1/shorts-studio/main/install.sh | bash
+```
+
+It installs everything in `~/.shorts-studio` (a private Python, no admin rights) and creates **Shorts Studio** in your user Applications folder. Run it again to update; uninstall with `rm -rf ~/.shorts-studio ~/Applications/"Shorts Studio.app"`. [install.sh](install.sh) is short if you want to read it first.
+
+### From source (macOS, Linux; Windows untested)
 
 ```bash
 git clone https://github.com/canardu1/shorts-studio.git
@@ -89,7 +97,7 @@ pip install -e ".[app]"
 face-reframe-app
 ```
 
-On macOS you can also double-click `Shorts Studio.command`: the first run creates its own environment and installs everything. To build a standalone `.app`: `packaging/build_mac.sh`.
+To build a standalone `.app` bundle: `packaging/build_mac.sh`.
 
 Typical flow: add videos → **Analizza volti** (analyse faces) → tune on the live preview → **Crea short**.
 The full option guide is in [docs/shorts-studio.md](docs/shorts-studio.md).

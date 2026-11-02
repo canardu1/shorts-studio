@@ -32,9 +32,18 @@ class EnhanceOptions:
     sharpen_sigma: float = 2.0
     face_boost: float = 0.35
     """Extra sharpening inside the face region (added to ``sharpen``)."""
-    ai_fraction: float = 0.5
-    """Fraction of the output size the model itself produces; 0.5 runs the
-    x4 network on output/8 input — the fastest setting still worth using."""
+    ai_fraction: float = 1.0
+    """Fraction of the output size the model itself produces (1.0: the x4
+    network gets output/4 input). Never more input than the crop really has."""
+    ai_max_pixels: int = 140_000
+    """Input pixel budget per frame (~270x480): keeps the network around
+    1-2 s/frame on an M1 CPU. The input is never upscaled to reach it."""
+    ai_native: bool = False
+    """Standalone restore pass (same size in and out): run the network even
+    when the crop isn't upscaled, and ignore the pixel budget."""
+    ai_strength: float = 0.55
+    """Mix of the network output with a plain lanczos upscale of the real
+    crop. 1.0 = network only (can look painted on real faces)."""
 
 
 def model_path() -> str:
@@ -104,25 +113,43 @@ class Enhancer:
                     self._inp = self._sess.get_inputs()[0].name
                     log("AI enhance: %s via %s" % (MODEL_NAME, providers[0]))
 
+    def needs_ai(self, crop, out_w: int, out_h: int) -> bool:
+        """Super-resolution only helps when the crop is really upscaled; on a
+        crop that already has the output's pixels it just repaints it."""
+        if self.opts.ai_native:
+            return True
+        return crop.shape[1] < 0.8 * out_w and crop.shape[0] < 0.8 * out_h
+
     def _ai(self, crop, out_w: int, out_h: int):
         import numpy as np
         cv2 = _cv2()
-        f = self.opts.ai_fraction
-        iw = max(32, int(round(out_w * f / 4.0)))
-        ih = max(32, int(round(out_h * f / 4.0)))
-        inp = cv2.resize(crop, (iw, ih), interpolation=cv2.INTER_AREA)
+        o = self.opts
+        ch, cw = crop.shape[:2]
+        iw, ih = out_w * o.ai_fraction / 4.0, out_h * o.ai_fraction / 4.0
+        k = 1.0 if o.ai_native else min(1.0, (o.ai_max_pixels / max(1.0, iw * ih)) ** 0.5)
+        iw, ih = iw * k, ih * k
+        if iw > cw or ih > ch:            # never invent input pixels
+            iw, ih = cw, ch
+        iw, ih = max(32, int(round(iw))), max(32, int(round(ih)))
+        inp = crop if (iw, ih) == (cw, ch) else cv2.resize(crop, (iw, ih), interpolation=cv2.INTER_AREA)
         rgb = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         blob = rgb.transpose(2, 0, 1)[None]
         res = self._sess.run(None, {self._inp: blob})[0][0].transpose(1, 2, 0)
         bgr = cv2.cvtColor(np.clip(res * 255.0, 0, 255).astype(np.uint8),
                            cv2.COLOR_RGB2BGR)
-        return cv2.resize(bgr, (out_w, out_h), interpolation=cv2.INTER_LANCZOS4)
+        down = bgr.shape[1] > out_w
+        ai = cv2.resize(bgr, (out_w, out_h), interpolation=cv2.INTER_AREA if down else cv2.INTER_LANCZOS4)
+        if o.ai_strength >= 1.0:
+            return ai
+        plain = cv2.resize(crop, (out_w, out_h), interpolation=cv2.INTER_LANCZOS4)
+        return cv2.addWeighted(ai, o.ai_strength, plain, 1.0 - o.ai_strength, 0)
 
     def __call__(self, crop, out_w: int, out_h: int,
                  face: Optional[Tuple[float, float]] = None):
         import numpy as np
         cv2 = _cv2()
-        if self.mode == "ai" and self._sess is not None:
+        ai = self.mode == "ai" and self._sess is not None and self.needs_ai(crop, out_w, out_h)
+        if ai:
             out = self._ai(crop, out_w, out_h)
         else:
             upscaling = crop.shape[1] < out_w
@@ -130,6 +157,9 @@ class Enhancer:
                              interpolation=cv2.INTER_LANCZOS4 if upscaling
                              else cv2.INTER_AREA)
         o = self.opts
+        if ai:   # the network already sharpens: only a touch on top
+            import dataclasses
+            o = dataclasses.replace(o, sharpen=o.sharpen * 0.3, face_boost=o.face_boost * 0.3)
         if self.mode == "off" or (o.sharpen <= 0.0
                                   and (o.face_boost <= 0.0 or face is None)):
             return out
