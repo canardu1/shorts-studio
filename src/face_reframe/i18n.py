@@ -555,4 +555,7 @@ _IT = {
     "✂ cut · ": "✂ tagliato · ",
     " · %d manual corrections": " · %d correzioni manuali",
     "Cut part": "Parte tagliata",
+    "Speech detection": "Rilevamento parlato",
+    "Neural (Silero VAD)": "Neurale (Silero VAD)",
+    "Levels (dB)": "Livelli (dB)",
 }

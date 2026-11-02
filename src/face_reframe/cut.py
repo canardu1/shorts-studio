@@ -24,6 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--margin-db", type=float, default=8.0, help="dB above the noise floor that counts as speech")
     p.add_argument("--release-db", type=float, default=4.0, help="dB above the noise floor where speech stops (hysteresis)")
     p.add_argument("--min-speech", type=float, default=0.15, help="drop speech blips shorter than this (s)")
+    p.add_argument("--engine", choices=("vad", "db"), default="vad",
+                   help="speech detection: neural Silero VAD, or dB levels above the noise floor")
     p.add_argument("--json", help="write kept intervals to this JSON file")
     p.add_argument("--no-render", action="store_true", help="only analyse")
     return p
@@ -50,7 +52,7 @@ def render_cut(video: str, spans: List[Tuple[float, float]], out: str) -> str:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    params = SpeechParams(min_pause=args.min_pause, padding=args.padding,
+    params = SpeechParams(vad=args.engine == "vad", min_pause=args.min_pause, padding=args.padding,
                           margin_db=args.margin_db, release_db=args.release_db, min_speech=args.min_speech)
     pcm = extract_audio(args.input)
     spans = speech_intervals(pcm, params)

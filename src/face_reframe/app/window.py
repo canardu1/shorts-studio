@@ -519,6 +519,7 @@ class MainWindow(QMainWindow):
         # --- cuts
         f = QFormLayout()
         W["cut_pauses"] = QCheckBox(tr("Cut pauses"))
+        W["speech_engine"] = combo([(tr("Neural (Silero VAD)"), "vad"), (tr("Levels (dB)"), "db")])
         W["min_pause"] = dspin(0.1, 3, 0.05, 0.35, 2, " s")
         W["padding"] = dspin(0, 0.5, 0.01, 0.16, 2, " s")
         W["margin_db"] = dspin(3, 20, 0.5, 8.0, 1, " dB")
@@ -526,6 +527,7 @@ class MainWindow(QMainWindow):
         W["cut_fillers"] = QCheckBox(tr("Cut ums / uhs  (Whisper)"))
         W["cut_retakes"] = QCheckBox(tr("Keep only the last retake  (Whisper)"))
         f.addRow(W["cut_pauses"])
+        f.addRow(tr("Speech detection"), W["speech_engine"])
         f.addRow(tr("Min pause"), W["min_pause"])
         f.addRow(tr("Padding"), W["padding"])
         f.addRow(tr("Voice threshold"), W["margin_db"])
@@ -873,7 +875,8 @@ class MainWindow(QMainWindow):
             restore=v("restore"), restore_blend=v("restore_blend"), restore_fidelity=v("restore_fidelity"),
             formats=formats, layout=v("layout"), punch=v("punch"), punch_zoom=v("punch_zoom"),
             cut_pauses=v("cut_pauses"),
-            speech=SpeechParams(min_pause=v("min_pause"), padding=v("padding"), margin_db=v("margin_db")),
+            speech=SpeechParams(vad=v("speech_engine") != "db",
+                                min_pause=v("min_pause"), padding=v("padding"), margin_db=v("margin_db")),
             cut_breaths=v("cut_breaths"), cut_fillers=v("cut_fillers"), cut_retakes=v("cut_retakes"),
             cinematic=v("cinematic"),
             cinematic_params=CinematicParams(denoise_db=v("denoise"), dereverb_db=v("dereverb"),
@@ -1004,8 +1007,11 @@ class MainWindow(QMainWindow):
 
     def _sync_enabled(self):
         v = self._val
-        for k in ("min_pause", "padding", "margin_db"):
+        for k in ("speech_engine", "min_pause", "padding"):
             self.w[k].setEnabled(v("cut_pauses"))
+        # margin_db is the RMS speech threshold; breaths are always dB-based
+        self.w["margin_db"].setEnabled(
+            v("cut_breaths") or (v("cut_pauses") and v("speech_engine") == "db"))
         for k in ("denoise", "dereverb", "warmth", "presence", "air"):
             self.w[k].setEnabled(v("cinematic"))
         for k in ("music_db", "duck"):
