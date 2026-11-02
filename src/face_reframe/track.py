@@ -36,6 +36,10 @@ class TrackSettings:
     screen (see :func:`find_people`); overrides ``subject`` in those shots.
     One array, or a list of them — several thumbnails of the same person
     (e.g. close-up and wide shot not matched automatically)."""
+    look_room: float = 0.0
+    """Leave room toward the gaze: the crop target shifts up to this fraction
+    of the crop width in the direction the face looks (from the nose-vs-eyes
+    landmarks; 0 disables, ~0.15 gives a visible off-centre composition)."""
 
 
 @dataclass
@@ -444,7 +448,17 @@ def build_camera_path(
         frames, sx, sy, sh = [], [], [], []
         for f, face in track:
             frames.append(f - a)
-            sx.append(face.cx)
+            cx = face.cx
+            if s.look_room > 0 and face.landmarks is not None:
+                # yaw from the 5 YuNet landmarks: nose tip drifting right of
+                # the eye midpoint means the face looks toward image-right,
+                # so the crop slides right and leaves room in the gaze path
+                rex, rey, lex, ley, nx, ny = face.landmarks[:6]
+                ed = abs(lex - rex)
+                if ed > 4:
+                    yaw = (nx - (rex + lex) / 2.0) / ed
+                    cx += s.look_room * zone_w * np.clip(yaw / 0.4, -1.0, 1.0)
+            sx.append(cx)
             sy.append(face.cy)
             sh.append(face.h)
         length = b - a

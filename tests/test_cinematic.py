@@ -11,6 +11,8 @@ import pytest
 from face_reframe.cinematic import (CinematicParams, afftdn_gs_supported,
                                     audio_chain, combine_loudness, enhance,
                                     noise_floor_db, speech_level_db)
+
+FFT = CinematicParams(denoise_engine="fft")
 from face_reframe.loudness import TARGET_I, measure_integrated
 from face_reframe.silence import SAMPLE_RATE
 
@@ -33,7 +35,7 @@ def test_noise_floor_db():
 
 
 def test_audio_chain_has_all_stages():
-    chain = audio_chain(CinematicParams(), -52.0)
+    chain = audio_chain(FFT, -52.0)
     for stage in ("highpass", "afftdn", "deesser", "sidechaingate",
                   "acompressor", "bass", "treble"):
         assert stage in chain
@@ -42,13 +44,28 @@ def test_audio_chain_has_all_stages():
 
 
 def test_audio_chain_adapts_to_noisy_floor():
-    chain = audio_chain(CinematicParams(), -35.0)
+    chain = audio_chain(FFT, -35.0)
     assert "nf=-35.0" in chain
     assert "nr=13.8" in chain  # noisier clip -> deeper reduction, capped vs artifacts
     if afftdn_gs_supported():
         assert ":gs=10" in chain   # gain smoothing = no metallic residue
     else:
         assert ":gs=" not in chain  # ffmpeg < 5: probed and dropped, not fatal
+
+
+def test_rnn_denoise_engine(monkeypatch):
+    monkeypatch.setattr("face_reframe.cinematic.arnndn_supported", lambda: True)
+    monkeypatch.setattr("face_reframe.cinematic.download_rnn",
+                        lambda: "/tmp/dir with spaces/sh.rnnn")
+    chain = audio_chain(CinematicParams(denoise_engine="rnn"), -50.0)
+    assert "arnndn=m='/tmp/dir with spaces/sh.rnnn'" in chain
+    assert "afftdn" not in chain
+
+
+def test_rnn_falls_back_to_afftdn(monkeypatch):
+    monkeypatch.setattr("face_reframe.cinematic.arnndn_supported", lambda: False)
+    chain = audio_chain(CinematicParams(denoise_engine="rnn"), -50.0)
+    assert "afftdn" in chain and "arnndn" not in chain
 
 
 def test_combine_loudness():
@@ -64,6 +81,7 @@ def test_audio_chain_stages_can_be_disabled():
     p = CinematicParams(denoise_db=0.0, deess=0.0, dereverb_db=0.0, comp_ratio=1.0)
     chain = audio_chain(p, -50.0)
     assert "afftdn" not in chain
+    assert "arnndn" not in chain
     assert "deesser" not in chain
     assert "sidechaingate" not in chain
     assert "acompressor" not in chain

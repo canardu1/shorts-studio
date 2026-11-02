@@ -23,6 +23,7 @@ Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for $15–30 a 
 - **Who to follow:** the main person, locked per shot (no jitter between two people), or **whoever is talking** (from mouth movement).
 - **Person picker:** thumbnails of everyone in the video, matched across shots with face recognition — tick the person to follow, even when they appear in both close-up and wide shots.
 - **Hand corrections:** drag the crop in the preview to re-aim from any frame, "auto from here" to hand control back.
+- **Look room:** optional crop shift toward where the face appears to be looking (from the eye/nose landmarks), so the subject isn't nose-to-edge.
 - **Split screen** for two-person podcasts (both stacked when both are in shot).
 - **Multi-format:** 9:16, 4:5, 1:1 and 16:9 from one analysis.
 
@@ -46,13 +47,13 @@ Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for $15–30 a 
 ### Image
 - **Face restoration** with AI models: GPEN-256 (fast), GPEN-512, GFPGAN 1.4, CodeFormer (best quality).
 - **Skin-tone normalisation:** fixes skin that the camera renders too red or saturated, touching only skin pixels; exportable as a `.cube` LUT for Resolve.
-- **Beauty:** skin smoothing, blemish removal, wrinkle and under-eye softening — eyes, lips, beard and hair stay sharp.
+- **Beauty:** skin smoothing, blemish removal, wrinkle and under-eye softening — a neural face-parsing mask (89 MB, downloads on first use) keeps eyes, lips, beard, hair and glasses razor sharp.
 - **Colour looks:** warm, cool, cinema, pop, vintage, black & white, plus **auto white balance** and exposure.
 - **Enhance:** fast sharpening or Real-ESRGAN AI upscaling of the crop.
 - **Blur background:** portrait-lens look — a recurrent RVM matte keeps the subject sharp and blurs the rest.
 
 ### Audio
-- **Cinematic dialogue** in one click: denoise, de-ess, de-reverb, rumble/boxiness cut, compression, warmth/presence/air EQ, −14 LUFS.
+- **Cinematic dialogue** in one click: denoise (neural **RNNoise** or classic FFT), de-ess, de-reverb, rumble/boxiness cut, compression, warmth/presence/air EQ, −14 LUFS.
 - **Background music** ducked under the voice with a sidechain compressor.
 - **Live preview of the treated audio** while you tune, with **A/B** against the original.
 

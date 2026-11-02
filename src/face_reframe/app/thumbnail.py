@@ -70,6 +70,42 @@ class Segmenter:
         return _keep_subject(a, face)
 
 
+class RvmSegmenter:
+    """Same job as :class:`Segmenter` through the RVM matte (better people
+    edges); used when the background-blur model is already downloaded."""
+
+    def __init__(self):
+        from .rvm import Matter
+        self.matter = Matter()
+
+    def __call__(self, img: np.ndarray, face=None) -> np.ndarray:
+        self.matter.reset()                     # stills: no temporal memory
+        a = self.matter(img)
+        a = np.clip((a - 0.1) / 0.8, 0, 1).astype(np.float32)
+        if face is not None:
+            a = a * person_prior(a.shape, face)
+        return _keep_subject(a, face)
+
+
+def _segmenter(log=print):
+    """The best available cutout backend: RVM when downloaded (it is once the
+    background blur was used), else U2NetP downloaded now, else None."""
+    from .rvm import rvm_available
+    if rvm_available():
+        try:
+            return RvmSegmenter()
+        except Exception as exc:
+            log(tr("Thumbnails: RVM cutout failed (%s), falling back") % exc)
+    try:
+        if not seg_available():
+            log(tr("Thumbnails: downloading the cutout model (4.6 MB, once)…"))
+            download_seg()
+        return Segmenter()
+    except Exception as exc:   # offline / no onnxruntime: soft head-and-shoulders shape
+        log(tr("Thumbnails: cutout unavailable (%s), using a soft shape") % exc)
+    return None
+
+
 def person_prior(shape, face) -> np.ndarray:
     """Soft region where a person around ``face`` can be: head plus a body
     widening below it (keeps flags, lamps, posters out of the cut-out)."""
@@ -398,14 +434,7 @@ def prepare(path: str, analysis, count: int = 4, progress=None, log=print) -> Li
     shots = pick_frames(path, analysis, count=count)
     if not shots:
         return []
-    seg = None
-    try:
-        if not seg_available():
-            log(tr("Thumbnails: downloading the cutout model (4.6 MB, once)…"))
-            download_seg()
-        seg = Segmenter()
-    except Exception as exc:   # offline / no onnxruntime: soft head-and-shoulders shape
-        log(tr("Thumbnails: cutout unavailable (%s), using a soft shape") % exc)
+    seg = _segmenter(log)
     out = []
     styles = [k for k, _ in STYLES]
     for i in range(count):

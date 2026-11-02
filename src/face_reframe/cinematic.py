@@ -28,7 +28,11 @@ from .silence import SAMPLE_RATE, extract_audio, find_ffmpeg
 @dataclass
 class CinematicParams:
     denoise_db: float = 12.0
-    """afftdn noise-reduction depth (dB). 0 disables denoising."""
+    """Noise-reduction depth (dB). 0 disables denoising; with the ``rnn``
+    engine the value is only an on/off switch — RNNoise has no depth knob."""
+    denoise_engine: str = "rnn"
+    """``rnn`` = arnndn (RNNoise GRU net) when the ffmpeg build and the model
+    support it, falling back to ``fft``; ``fft`` = afftdn spectral subtraction."""
     highpass: float = 85.0
     """Rumble/handling-noise cut below this frequency (Hz)."""
     deess: float = 0.3
@@ -98,15 +102,69 @@ def afftdn_gs_supported() -> bool:
     return _GS_OK
 
 
-def _denoiser(p: CinematicParams, floor_db: float) -> Optional[str]:
-    """afftdn stage: nf tracks the measured floor; nr scales a little with it.
+RNN_URL = "https://github.com/richardpl/arnndn-models/raw/master/sh.rnnn"
+"""somnolent-hogwash: trained for speech over recording/room noise (~300 kB)."""
+RNN_FILE = "sh.rnnn"
 
+
+def rnn_model_path() -> str:
+    from .restore import models_dir
+    return os.path.join(models_dir(), RNN_FILE)
+
+
+def download_rnn() -> Optional[str]:
+    """The RNNoise model file for arnndn, or None if it can't be fetched."""
+    path = rnn_model_path()
+    if os.path.exists(path) and os.path.getsize(path) > 50_000:
+        return path
+    try:
+        from .restore import fetch
+        return fetch(RNN_URL, path, None)
+    except Exception:
+        return None
+
+
+_ARNNDN_OK = None
+
+
+def arnndn_supported() -> bool:
+    """Whether the resolved ffmpeg ships the arnndn (RNNoise) filter."""
+    global _ARNNDN_OK
+    if _ARNNDN_OK is None:
+        try:
+            raw = subprocess.run([find_ffmpeg(), "-hide_banner", "-filters"],
+                                 capture_output=True, check=False)
+            _ARNNDN_OK = b"arnndn" in raw.stdout
+        except Exception:
+            _ARNNDN_OK = False
+    return _ARNNDN_OK
+
+
+def _rnnoise() -> Optional[str]:
+    """``arnndn=`` filter term when both the filter and the model exist."""
+    if not arnndn_supported():
+        return None
+    path = download_rnn()
+    if path is None:
+        return None
+    return "arnndn=m='%s'" % path.replace("'", "\\'")
+
+
+def _denoiser(p: CinematicParams, floor_db: float) -> Optional[str]:
+    """Denoise stage. ``rnn`` uses the RNNoise net (arnndn) and falls back to
+    the afftdn stage below when the model or the filter can't run.
+
+    afftdn stage: nf tracks the measured floor; nr scales a little with it.
     ``gs`` smooths the per-band gain decision — without it the residual
     comes out as isolated spectral bins (the "metallic"/watery artifact).
     nr stays capped on purpose: deep FFT suppression is what makes that
     residue audible."""
     if p.denoise_db <= 0:
         return None
+    if p.denoise_engine == "rnn":
+        rnn = _rnnoise()
+        if rnn is not None:
+            return rnn
     nr = p.denoise_db * (1.15 if floor_db > -40 else 0.8 if floor_db < -55 else 1.0)
     nf = min(-20.0, max(-80.0, floor_db))
     return "afftdn=nr=%.1f:nf=%.1f%s" % (

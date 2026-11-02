@@ -731,8 +731,8 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         restorer = make_restorer(s, log, step(tr("Model download")))
         beautifier = None
         if s.beauty is not None and s.beauty.active:
-            from ..beauty import Beautifier
-            beautifier = Beautifier(s.beauty)
+            from ..beauty import build as build_beauty
+            beautifier = build_beauty(s.beauty, log, step(tr("Model download")))
             log(tr("Beauty: smoothing %.0f%%, blemishes %.0f%%, wrinkles %.0f%%")
                 % (100 * s.beauty.smooth, 100 * s.beauty.blemish, 100 * s.beauty.wrinkles))
         if restorer is not None:

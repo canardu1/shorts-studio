@@ -3,7 +3,8 @@
 import numpy as np
 import pytest
 
-from face_reframe.beauty import Beautifier, BeautySettings
+from face_reframe.beauty import (Beautifier, BeautySettings, build,
+                                 parse_available)
 
 
 @pytest.fixture(scope="module")
@@ -46,3 +47,49 @@ def test_off_and_no_face():
     frame = np.full((640, 360, 3), 90, np.uint8)
     assert Beautifier(BeautySettings(0.5, 0.5, 0.5))(frame) is frame
     assert not BeautySettings(0, 0, 0).active
+
+
+def test_parser_tightens_mask(blemished):
+    bad, _, lm = blemished
+
+    class StubParser:
+        def __call__(self, roi):
+            m = np.ones(roi.shape[:2], np.float32)
+            m[: roi.shape[0] // 3] = 0.0          # "hair" excluded
+            return m
+
+    out = Beautifier(BeautySettings(0.6, 0.8, 0.5), parser=StubParser())(bad)
+    base = Beautifier(BeautySettings(0.6, 0.8, 0.5))(bad)
+    assert not np.array_equal(out, base)
+
+
+def test_parser_failure_falls_back(blemished):
+    bad, *_ = blemished
+
+    class Boom:
+        def __call__(self, roi):
+            raise RuntimeError("no model")
+
+    b = Beautifier(BeautySettings(0.6, 0.8, 0.5), parser=Boom())
+    out = b(bad)
+    assert b.parser is None and out.shape == bad.shape
+
+
+def test_build_without_model(monkeypatch):
+    monkeypatch.setattr("face_reframe.beauty.parse_available", lambda: False)
+    monkeypatch.setattr("face_reframe.beauty.download_parse",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline")))
+    logs = []
+    b = build(BeautySettings(0.5, 0.5, 0.5), logs.append)
+    assert b.parser is None and any("unavailable" in m for m in logs)
+
+
+@pytest.mark.skipif(not parse_available(), reason="parsing model not downloaded")
+def test_real_parser_mask():
+    import cv2
+    from skimage import data
+    img = cv2.cvtColor(data.astronaut(), cv2.COLOR_RGB2BGR)
+    roi = cv2.resize(img[0:300, 100:380], (512, 512))
+    from face_reframe.beauty import FaceParser
+    m = FaceParser()(roi)
+    assert m.shape == (512, 512) and 0.1 < m.mean() < 0.9

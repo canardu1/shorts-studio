@@ -500,6 +500,10 @@ _IT = {
     "no face to measure": "nessun volto da misurare",
     "Downloading the %s model (%d MB, once)…": "Scarico il modello %s (%d MB, una volta sola)...",
     "Model download": "Download modello",
+    "Beauty: downloading the face-parsing model (89 MB, once)…":
+        "Beauty: scarico il modello di face-parsing (89 MB, una volta)…",
+    "  face parsing unavailable (%s): landmark mask":
+        "  face parsing non disponibile (%s): maschera landmark",
     "Beauty: smoothing %.0f%%, blemishes %.0f%%, wrinkles %.0f%%":
         "Beauty: levigatura %.0f%%, macchie %.0f%%, rughe %.0f%%",
     "Face restoration %s: %.2f s per face -> about %s for %d frames":
@@ -572,4 +576,11 @@ _IT = {
     "  background blur unavailable (%s)": "  sfondo sfocato non disponibile (%s)",
     " · background blur: the model downloads on first export":
         " · sfondo sfocato: il modello si scarica al primo export",
+    "Thumbnails: RVM cutout failed (%s), falling back":
+        "Copertine: scontorno RVM fallito (%s), ripiego su U2Net",
+    "Leave room toward the gaze": "Lascia spazio verso lo sguardo",
+    "Gaze room": "Spazio sguardo",
+    "Denoise engine": "Motore denoise",
+    "Neural (RNNoise)": "Neurale (RNNoise)",
+    "Spectral (FFT)": "Spettrale (FFT)",
 }

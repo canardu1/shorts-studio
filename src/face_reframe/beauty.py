@@ -18,10 +18,13 @@ Cost: ~10-25 ms per face on the output frame (only the face box is touched).
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass
 from typing import List, Optional
 
 import numpy as np
+
+from .i18n import tr
 
 
 @dataclass
@@ -35,6 +38,76 @@ class BeautySettings:
         return self.smooth > 0 or self.blemish > 0 or self.wrinkles > 0
 
 
+# ------------------------------------------------------------------ parsing
+PARSE_FILE = "bisenet_resnet_34.onnx"
+
+
+def parse_model_path() -> str:
+    from .restore import BASE_URL, models_dir
+    return os.path.join(models_dir(), PARSE_FILE)
+
+
+def parse_available() -> bool:
+    p = parse_model_path()
+    return os.path.exists(p) and os.path.getsize(p) > 50_000_000
+
+
+def download_parse(progress=None) -> str:
+    path = parse_model_path()
+    if parse_available():
+        return path
+    from .restore import BASE_URL, fetch
+    return fetch(BASE_URL + PARSE_FILE, path, progress)
+
+
+_PSESS = None
+
+
+class FaceParser:
+    """Precise skin mask from a BiSeNet face-parsing net (CelebAMask-HQ).
+
+    Tightens the landmark ellipse: jaw, ears, hairline, glasses and beard are
+    classified properly instead of approximated. Weights are the shared
+    bisenet_resnet_34 export (89 MB), downloaded once.
+    """
+
+    SKIN = (1, 2, 17)          # skin, nose, neck — not eyes/brows/lips/hair
+
+    def __call__(self, roi: np.ndarray) -> np.ndarray:
+        """(h, w) float32 mask 0..1 of skin-only regions in ``roi``."""
+        import cv2
+        global _PSESS
+        if _PSESS is None:
+            import onnxruntime as ort
+            so = ort.SessionOptions()
+            so.log_severity_level = 3
+            _PSESS = ort.InferenceSession(parse_model_path(), so,
+                                          providers=["CPUExecutionProvider"])
+        h, w = roi.shape[:2]
+        x = cv2.resize(roi, (512, 512), interpolation=cv2.INTER_AREA)
+        x = x[..., ::-1].astype(np.float32) / 255.0
+        x = ((x - (0.485, 0.456, 0.406)) / (0.229, 0.224, 0.225)).astype(np.float32)
+        out = _PSESS.run(["output"], {"input": x.transpose(2, 0, 1)[None]})[0]
+        lab = out.argmax(1)[0]
+        m = np.isin(lab, self.SKIN).astype(np.float32)
+        m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+        return cv2.resize(m, (w, h), interpolation=cv2.INTER_LINEAR)
+
+
+def build(s: BeautySettings, log=print, progress=None) -> "Beautifier":
+    """Beautifier, with the parsing mask when the model is (or gets) there."""
+    parser = None
+    if s.active:
+        try:
+            if not parse_available():
+                log(tr("Beauty: downloading the face-parsing model (89 MB, once)…"))
+                download_parse(progress)
+            parser = FaceParser()
+        except Exception as exc:
+            log(tr("  face parsing unavailable (%s): landmark mask") % exc)
+    return Beautifier(s, parser=parser)
+
+
 def _odd(n: float) -> int:
     n = max(3, int(round(n)))
     return n if n % 2 else n + 1
@@ -43,11 +116,12 @@ def _odd(n: float) -> int:
 class Beautifier:
     """Callable ``frame -> frame``; keeps light landmark smoothing across frames."""
 
-    def __init__(self, s: BeautySettings, max_faces: int = 2, min_face: int = 60):
+    def __init__(self, s: BeautySettings, max_faces: int = 2, min_face: int = 60, parser=None):
         from .detect import FaceDetector
         self.s = s
         self.max_faces, self.min_face = max_faces, min_face
         self.detector = FaceDetector(min_score=0.6)
+        self.parser = parser
         self._prev: List[np.ndarray] = []
 
     def _smooth_lm(self, lm: np.ndarray) -> np.ndarray:
@@ -125,7 +199,13 @@ class Beautifier:
         skinlike = cv2.morphologyEx(skinlike, cv2.MORPH_CLOSE,
                                     cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kc, kc)))
         skinlike = cv2.GaussianBlur(skinlike, (0, 0), feather)
-        mask = np.clip(face * (1.0 - excl) * skinlike, 0, 1)[..., None]
+        mask = face * (1.0 - excl) * skinlike
+        if self.parser is not None:
+            try:
+                mask = mask * self.parser(roi)
+            except Exception:
+                self.parser = None          # broken model: landmark mask only
+        mask = np.clip(mask, 0, 1)[..., None]
 
         src = roi.astype(np.float32)
         res = src.copy()

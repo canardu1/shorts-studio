@@ -492,6 +492,8 @@ class MainWindow(QMainWindow):
         W["zoom"] = dspin(1, 3, 0.05, 1.0, 2, "×")
         W["follow_vertical"] = QCheckBox(tr("Follow the face vertically too"))
         W["face_pos"] = dspin(0.2, 0.5, 0.01, 0.4)
+        W["look_room"] = QCheckBox(tr("Leave room toward the gaze"))
+        W["look_room_amount"] = dspin(0.05, 0.4, 0.05, 0.15)
         W["punch"] = QCheckBox(tr("Auto punch-in on phrases"))
         W["punch_zoom"] = dspin(1.02, 1.5, 0.01, 1.15, 2, "×")
         W["wide_mode"] = combo([(tr("Zoom on subject"), "zoom"), (tr("Full height"), "keep")])
@@ -508,6 +510,8 @@ class MainWindow(QMainWindow):
         f.addRow("Zoom", W["zoom"])
         f.addRow(W["follow_vertical"])
         f.addRow(tr("Face height"), W["face_pos"])
+        f.addRow(W["look_room"])
+        f.addRow(tr("Gaze room"), W["look_room_amount"])
         f.addRow(W["punch"])
         f.addRow(tr("Punch-in zoom"), W["punch_zoom"])
         f.addRow(tr("Wide shots"), W["wide_mode"])
@@ -542,6 +546,7 @@ class MainWindow(QMainWindow):
         f = QFormLayout()
         W["cinematic"] = QCheckBox(tr("Cinematic audio"))
         W["denoise"] = dspin(0, 40, 1, 12, 0, " dB")
+        W["denoise_engine"] = combo([(tr("Neural (RNNoise)"), "rnn"), (tr("Spectral (FFT)"), "fft")])
         W["dereverb"] = dspin(0, 30, 1, 12, 0, " dB")
         W["warmth"] = dspin(-6, 6, 0.1, 1.6, 1, " dB")
         W["presence"] = dspin(-6, 6, 0.1, 2.2, 1, " dB")
@@ -564,6 +569,7 @@ class MainWindow(QMainWindow):
         W["duck"].setCurrentIndex(1)
         f.addRow(W["cinematic"])
         f.addRow(tr("Noise reduction"), W["denoise"])
+        f.addRow(tr("Denoise engine"), W["denoise_engine"])
         f.addRow(tr("De-reverb"), W["dereverb"])
         f.addRow(tr("Warmth"), W["warmth"])
         f.addRow(tr("Presence"), W["presence"])
@@ -860,7 +866,8 @@ class MainWindow(QMainWindow):
             aspect=v("aspect"), zoom=v("zoom"), follow_vertical=v("follow_vertical"),
             face_height_pos=v("face_pos"), stride=int(v("stride")),
             track=TrackSettings(smoothing=v("smoothing"), dead_zone=v("dead_zone"), max_speed=v("max_speed"),
-                                subject=v("subject")),
+                                subject=v("subject"),
+                                look_room=v("look_room_amount") if v("look_room") else 0.0),
             shots=ShotSettings(wide_mode=v("wide_mode"), wide_threshold=v("wide_threshold"),
                                max_zoom=v("max_zoom")),
         )
@@ -887,7 +894,8 @@ class MainWindow(QMainWindow):
                                 min_pause=v("min_pause"), padding=v("padding"), margin_db=v("margin_db")),
             cut_breaths=v("cut_breaths"), cut_fillers=v("cut_fillers"), cut_retakes=v("cut_retakes"),
             cinematic=v("cinematic"),
-            cinematic_params=CinematicParams(denoise_db=v("denoise"), dereverb_db=v("dereverb"),
+            cinematic_params=CinematicParams(denoise_db=v("denoise"), denoise_engine=v("denoise_engine"),
+                                             dereverb_db=v("dereverb"),
                                              warmth_db=v("warmth"), presence_db=v("presence"),
                                              air_db=v("air")),
             music_path=self.music_path or None, music_db=v("music_db"), duck_ratio=v("duck"),
@@ -942,8 +950,9 @@ class MainWindow(QMainWindow):
             return None
         key = (b.smooth, b.blemish, b.wrinkles)
         if getattr(self, "_beauty_key", None) != key:
-            from ..beauty import Beautifier
-            self._beauty_obj, self._beauty_key = Beautifier(b), key
+            from ..beauty import Beautifier, FaceParser, parse_available
+            parser = FaceParser() if parse_available() else None
+            self._beauty_obj, self._beauty_key = Beautifier(b, parser=parser), key
         return self._beauty_obj
 
     def motion_settings(self):
@@ -1020,7 +1029,7 @@ class MainWindow(QMainWindow):
         # margin_db is the RMS speech threshold; breaths are always dB-based
         self.w["margin_db"].setEnabled(
             v("cut_breaths") or (v("cut_pauses") and v("speech_engine") == "db"))
-        for k in ("denoise", "dereverb", "warmth", "presence", "air"):
+        for k in ("denoise", "denoise_engine", "dereverb", "warmth", "presence", "air"):
             self.w[k].setEnabled(v("cinematic"))
         for k in ("music_db", "duck"):
             self.w[k].setEnabled(bool(self.music_path))
@@ -1028,6 +1037,7 @@ class MainWindow(QMainWindow):
             self.w[k].setEnabled(v("enhance") != "off")
         self.w["restore_blend"].setEnabled(v("restore") != "off")
         self.w["bg_blur_amount"].setEnabled(v("bg_blur"))
+        self.w["look_room_amount"].setEnabled(v("look_room"))
         self.w["skin_strength"].setEnabled(v("skin"))
         for k in ("beauty_smooth", "beauty_blemish", "beauty_wrinkles"):
             self.w[k].setEnabled(v("beauty"))

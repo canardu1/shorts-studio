@@ -19,6 +19,10 @@ Shorts Studio / Face Reframe is licensed under GPL-3.0 (see `LICENSE`). It uses 
 | GPEN-BFR 256 / 512 | face restoration | [yangxy/GPEN](https://github.com/yangxy/GPEN), ONNX via facefusion-assets | **non-commercial use only** |
 | CodeFormer | face restoration | [sczhou/CodeFormer](https://github.com/sczhou/CodeFormer), ONNX via facefusion-assets | **S-Lab License 1.0 — non-commercial use only** |
 | Whisper (faster-whisper / CTranslate2 conversion) | transcription, translation | [openai/whisper](https://github.com/openai/whisper), [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT |
+| Silero VAD `silero_vad_v6.onnx` | speech detection for silence cuts | [snakers4/silero-vad](https://github.com/snakers4/silero-vad), bundled in faster-whisper | MIT |
+| RVM `rvm_mobilenetv3_fp32.onnx` | person matte: background blur, thumbnail cut-outs | [PeterL1n/RobustVideoMatting](https://github.com/PeterL1n/RobustVideoMatting) | MIT |
+| BiSeNet `bisenet_resnet_34.onnx` | face parsing: precise skin mask for beauty | [zllrunning/face-parsing.PyTorch](https://github.com/zllrunning/face-parsing.PyTorch), ONNX via facefusion-assets | see source repo |
+| RNNoise `sh.rnnn` | neural audio denoise (FFmpeg `arnndn`) | [richardpl/arnndn-models](https://github.com/richardpl/arnndn-models); RNNoise is BSD-3-Clause | see source repo |
 
 If you use Shorts Studio commercially, pick **GFPGAN** (or "off") for face restoration: the GPEN and CodeFormer weights may not be used for commercial purposes.
 
