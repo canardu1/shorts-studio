@@ -207,5 +207,5 @@ def test_job_with_extras(two_people, tmp_path):
     logs = []
     outs = run_job(path, s, lambda *_: None, logs.append, cache=AnalysisCache(disk=False))
     base = os.path.splitext(outs[0])[0]
-    assert os.path.exists(base + "_copertina.jpg") and os.path.exists(base + "_testi.txt"), logs
+    assert os.path.exists(base + "_cover.jpg") and os.path.exists(base + "_texts.txt"), logs
     assert any("Colour: look cine" in l for l in logs) and any("encoder: x264" in l for l in logs)

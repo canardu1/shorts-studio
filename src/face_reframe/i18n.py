@@ -553,4 +553,6 @@ _IT = {
     "Wide · zoom %.2f×": "Largo · zoom %.2f×",
     "No face": "Nessun volto",
     "✂ cut · ": "✂ tagliato · ",
+    " · %d manual corrections": " · %d correzioni manuali",
+    "Cut part": "Parte tagliata",
 }

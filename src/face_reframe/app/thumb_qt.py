@@ -91,7 +91,7 @@ class ThumbDialog(QDialog):
 
     def _name(self, v, i):
         tag = "youtube" if self.aspect.currentData() == "16:9" else "shorts"
-        return os.path.join(self.out_dir, "%s_copertina_%s_%d_%s.jpg" % (self.stem, tag, i + 1, v.style))
+        return os.path.join(self.out_dir, "%s_thumb_%s_%d_%s.jpg" % (self.stem, tag, i + 1, v.style))
 
     def save_variant(self, i) -> str:
         os.makedirs(self.out_dir, exist_ok=True)

@@ -10,6 +10,8 @@ from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
 from PySide6.QtCore import QPointF
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
+from ..i18n import tr
+
 
 class Timeline(QWidget):
     seek = Signal(int)
@@ -78,4 +80,4 @@ class Timeline(QWidget):
         else:
             t = (ev.position().x() - 6) / max(1.0, self.width() - 12) * self.n / self.fps
             inside = any(a <= t < b for a, b in self.removed)
-            self.setToolTip("Parte tagliata" if inside else "")
+            self.setToolTip(tr("Cut part") if inside else "")

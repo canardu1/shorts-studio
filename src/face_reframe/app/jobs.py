@@ -458,7 +458,7 @@ class CaptionBurner:
             img = None
             if txt:
                 img = self.renderer([txt], None, int(self.out_w * 0.62))
-            self._second = {k: img}
+            self._second[k] = img
         return self._second[k]
 
     def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
@@ -863,7 +863,7 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                 try:
                     cp = make_cover(cur, analysis, framer, out_w, out_h, hook_text or (
                         __import__("face_reframe.app.overlays", fromlist=["x"]).first_sentence(words)
-                        if words else ""), title_renderer, os.path.splitext(out)[0] + "_copertina.jpg")
+                        if words else ""), title_renderer, os.path.splitext(out)[0] + "_cover.jpg")
                     log(tr("Thumbnail: %s") % os.path.basename(cp))
                 except Exception as exc:
                     log(tr("  thumbnail not created (%s)") % exc)
@@ -880,7 +880,7 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                     log(tr("  YouTube thumbnail not created (%s)") % exc)
             if aspect == aspects[0] and s.social:
                 from .social import make_texts, to_text
-                tp = os.path.splitext(out)[0] + "_testi.txt"
+                tp = os.path.splitext(out)[0] + "_texts.txt"
                 with open(tp, "w", encoding="utf-8") as fh:
                     fh.write(to_text(make_texts(words or [], hook_text, s.language)))
                 log(tr("Social texts: %s") % os.path.basename(tp))

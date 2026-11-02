@@ -1463,7 +1463,7 @@ class MainWindow(QMainWindow):
             self._look = Look(s.look, s.look_strength, self._gains_for() if s.auto_wb else None)
         man = self.manual.get(key) or []
         if man:
-            info += " · %d correzioni manuali" % len(man)
+            info += tr(" · %d manual corrections") % len(man)
         self.info_lab.setText(info)
         self.timeline.set_data(self.reader.count, fps, self.removed, cuts, [m[0] for m in man],
                                self.clip_range, bool(words))
@@ -1583,7 +1583,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, APP_NAME, tr("Enable “Normalize skin color” and press “Analyze faces”: the LUT is based on the skin measured in the video."))
             return
         base = os.path.splitext(os.path.basename(self.current))[0]
-        path, _ = QFileDialog.getSaveFileName(self, tr("Save LUT"), base + "_pelle.cube", "LUT (*.cube)")
+        path, _ = QFileDialog.getSaveFileName(self, tr("Save LUT"), base + "_skin.cube", "LUT (*.cube)")
         if path:
             from ..skin import write_cube
             write_cube(c, path)
