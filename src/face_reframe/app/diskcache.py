@@ -73,7 +73,8 @@ def size_mb() -> float:
 def clear() -> None:
     d = cache_dir()
     for n in os.listdir(d):
-        if n.endswith(".pkl") or (n.startswith("proxy_") and n.endswith(".mp4")):
+        if (n.endswith(".pkl") or n.endswith(".frames")
+                or (n.startswith("proxy_") and n.endswith(".mp4"))):
             try:
                 os.unlink(os.path.join(d, n))
             except OSError:

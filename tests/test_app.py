@@ -326,6 +326,36 @@ def test_gui_heavy_source_plays_from_proxy(talking_clip, tmp_path, monkeypatch):
     app.processEvents()
 
 
+def test_proxy_build_retries_a_decoder_that_drops_frames(talking_clip, tmp_path, monkeypatch):
+    """If a decoder silently loses frames, the next attempt fixes the proxy."""
+    from face_reframe.app import proxy
+    real = proxy._frames(talking_clip)
+    seq = iter([real - 30, real])     # first decode drops, second is faithful
+    monkeypatch.setattr(proxy, "_frames", lambda p: next(seq, real))
+    out = proxy.build(talking_clip, str(tmp_path / "p.mp4"), expected=real)
+    assert proxy.verified_count(out) == real
+
+
+def test_proxy_build_accepts_the_decoders_consensus(talking_clip, tmp_path, monkeypatch):
+    """When every decoder reports the same count that differs from cv2's
+    metadata estimate, the proxy is right and cv2 was wrong (VFR, edit
+    lists): keep it instead of discarding on every open."""
+    from face_reframe.app import proxy
+    real = proxy._frames(talking_clip)
+    monkeypatch.setattr(proxy, "_frames", lambda p: real - 5)
+    out = proxy.build(talking_clip, str(tmp_path / "p2.mp4"), expected=real)
+    assert proxy.verified_count(out) == real - 5
+
+
+def test_proxy_build_fails_when_decoders_disagree(talking_clip, tmp_path, monkeypatch):
+    from face_reframe.app import proxy
+    real = proxy._frames(talking_clip)
+    seq = iter([real - 30, real - 5, real - 30, real - 5])
+    monkeypatch.setattr(proxy, "_frames", lambda p: next(seq, real - 5))
+    with pytest.raises(RuntimeError, match="frame count"):
+        proxy.build(talking_clip, str(tmp_path / "p3.mp4"), expected=real)
+
+
 def test_gui_subtitle_editor(talking_clip, tmp_path, monkeypatch):
     pytest.importorskip("PySide6")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

@@ -54,9 +54,42 @@ def needs_proxy(reader) -> bool:
     return n > 0 and (time.perf_counter() - t) / n > 0.008
 
 
+def _frames(path: str) -> int:
+    import cv2
+    cap = cv2.VideoCapture(path)
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    return n
+
+
+def _mark_verified(out: str, n: int) -> None:
+    try:
+        with open(out + ".frames", "w") as fh:
+            fh.write(str(n))
+    except OSError:
+        pass
+
+
+def verified_count(p: str) -> Optional[int]:
+    """Frame count recorded next to the proxy when build() verified it —
+    lets openers trust the decoder's word over cv2's metadata guess."""
+    try:
+        with open(p + ".frames") as fh:
+            return int(fh.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
 def build(src: str, out: str, progress: Optional[Callable[[float], None]] = None,
-          duration: float = 0.0) -> str:
-    """Transcode the proxy (hardware decode on macOS when available)."""
+          duration: float = 0.0, expected: int = 0) -> str:
+    """Transcode the proxy (hardware decode on macOS when available).
+
+    ``expected`` is the source's frame count as the caller's reader sees
+    it: a proxy whose count drifts is rebuilt by the next attempt — e.g.
+    VideoToolbox can silently drop frames on flaky streams and still
+    exit 0. If every attempt agrees on the same different count, cv2's
+    own estimate is the outlier (VFR, edit lists) and the proxy is kept.
+    """
     from ..silence import find_ffmpeg
     tmp = out + ".part.mp4"
     base = ["-i", src, "-map", "0:v:0", "-vf", "scale=-2:'min(%d,ih)'" % PROXY_HEIGHT,
@@ -70,6 +103,7 @@ def build(src: str, out: str, progress: Optional[Callable[[float], None]] = None
             attempts.append((["-hwaccel", "videotoolbox"], sync))
         attempts.append(([], sync))
     err = ""
+    counts = []
     for hw, sync in attempts:
         cmd = ([find_ffmpeg(), "-y", "-loglevel", "error", "-nostats", "-progress", "pipe:1"]
                + hw + base + sync + [tmp])
@@ -90,6 +124,20 @@ def build(src: str, out: str, progress: Optional[Callable[[float], None]] = None
         proc.wait()
         err = proc.stderr.read() if proc.stderr else ""
         if proc.returncode == 0:
+            n = _frames(tmp)
+            if n <= 0:
+                continue   # undecodable output — try the next decoder
+            if expected and abs(n - expected) > 2:
+                counts.append(n)
+                continue
             os.replace(tmp, out)
+            _mark_verified(out, n)
             return out
+    if counts and len(set(counts)) == 1:
+        os.replace(tmp, out)
+        _mark_verified(out, counts[0])
+        return out
+    if counts:
+        raise RuntimeError(tr("proxy not created: frame count %s, source has %d")
+                           % (counts, expected))
     raise RuntimeError(tr("proxy not created: %s") % err[-300:])

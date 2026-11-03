@@ -375,8 +375,8 @@ _IT = {
     "Add every video in a folder": "Aggiungi tutti i video di una cartella",
     "Heavy video: making a light copy for smooth preview…":
         "Video pesante: preparo una copia leggera per l'anteprima fluida…",
-    "Proxy discarded (frame count differs from the original)":
-        "Proxy scartato (fotogrammi diversi dall'originale)",
+    "Proxy discarded (frame count %d, source has %d)":
+        "Proxy scartato (fotogrammi %d, l'originale ne ha %d)",
     "Preview: playing the light copy": "Anteprima: uso la copia leggera in riproduzione",
     "Preview audio unavailable (%s)": "Audio dell'anteprima non disponibile (%s)",
     "Preview audio: %s": "Audio dell'anteprima: %s",

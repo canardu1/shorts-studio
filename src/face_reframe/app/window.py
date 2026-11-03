@@ -253,6 +253,7 @@ class MainWindow(QMainWindow):
         self._pa_dir = None
         self.pa_timer = None
         self.proxy: Optional[VideoReader] = None   # light copy for smooth playback
+        self._proxy_retries = set()                # files already given one proxy rebuild
         self._skin = {}              # abs path -> measured SkinCorrection
         self._skin_view = None       # (key, correction at the current strength)
         self._restorer = None        # preview face restorer (built in the background)
@@ -1341,7 +1342,7 @@ class MainWindow(QMainWindow):
         self._log(tr("Heavy video: making a light copy for smooth preview…"))
 
         def job(progress):
-            return path, proxy.build(path, out, progress, dur)
+            return path, proxy.build(path, out, progress, dur, self.reader.count)
 
         def done(res):
             src, p2 = res
@@ -1351,13 +1352,26 @@ class MainWindow(QMainWindow):
         self._run(job, done, tr("Preview proxy"))
 
     def _open_proxy(self, src, p):
+        from . import proxy
         try:
             pr = VideoReader(p)
         except IOError:
             return
-        if abs(pr.count - self.reader.count) > 2:
-            self._log(tr("Proxy discarded (frame count differs from the original)"))
+        # a proxy built here is verified against the decoder, not cv2's
+        # metadata estimate (which is off on some VFR / edit-list files)
+        exp = proxy.verified_count(p) or self.reader.count
+        if abs(pr.count - exp) > 2:
+            self._log(tr("Proxy discarded (frame count %d, source has %d)")
+                      % (pr.count, exp))
             pr.close()
+            try:
+                os.unlink(p)   # poisoned cache entry: let the next open rebuild it
+                os.unlink(p + ".frames")
+            except OSError:
+                pass
+            if src not in self._proxy_retries:
+                self._proxy_retries.add(src)
+                QTimer.singleShot(0, self._load_proxy)
             return
         self.proxy = pr
         self.proxy.sequential = self.play_timer.isActive()
