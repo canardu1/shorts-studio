@@ -99,13 +99,13 @@ class FrameView(QWidget):
         rr = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         clip = QPainterPath()
         clip.addRoundedRect(rr, 9, 9)
-        p.fillPath(clip, QColor("#0d0f13"))
+        p.fillPath(clip, QColor("#0e0e0e"))
         p.setClipPath(clip)
         if self._img is None or self._img.isNull():
-            p.setPen(QColor("#565f6d"))
+            p.setPen(QColor("#585858"))
             p.drawText(self.rect(), Qt.AlignCenter | Qt.TextWordWrap, self._placeholder)
             p.setClipping(False)
-            p.setPen(QPen(QColor("#22262e"), 1))
+            p.setPen(QPen(QColor("#232323"), 1))
             p.setBrush(Qt.NoBrush)
             p.drawRoundedRect(rr, 9, 9)
             return
@@ -142,10 +142,10 @@ class FrameView(QWidget):
             fm = p.fontMetrics()
             bw = fm.horizontalAdvance(self._badge) + 14
             p.drawRoundedRect(QRectF(target.x() + 8, target.y() + 8, bw, 22), 6, 6)
-            p.setPen(QColor("#e5e7eb"))
+            p.setPen(QColor("#e6e6e6"))
             p.drawText(QRectF(target.x() + 8, target.y() + 8, bw, 22), Qt.AlignCenter, self._badge)
         p.setClipping(False)
-        p.setPen(QPen(QColor("#22262e"), 1))
+        p.setPen(QPen(QColor("#232323"), 1))
         p.setBrush(Qt.NoBrush)
         p.drawRoundedRect(rr, 9, 9)
 

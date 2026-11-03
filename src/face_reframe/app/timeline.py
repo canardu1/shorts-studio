@@ -49,17 +49,17 @@ class Timeline(QWidget):
         bar = QRectF(6, 9, self.width() - 12, 12)
         track = QPainterPath()
         track.addRoundedRect(bar, 6, 6)
-        p.fillPath(track, QColor("#1d2129"))
+        p.fillPath(track, QColor("#1e1e1e"))
         p.save()
         p.setClipPath(track)
         if self.clip is not None:
             a, b = self.clip
-            p.fillRect(QRectF(self._x(a), 9, self._x(b) - self._x(a), 12), QColor("#313a48"))
+            p.fillRect(QRectF(self._x(a), 9, self._x(b) - self._x(a), 12), QColor("#323232"))
         for a, b in self.removed:
             x0, x1 = self._x(a * self.fps), self._x(b * self.fps)
             p.fillRect(QRectF(x0, 9, max(1.0, x1 - x0), 12), QColor(229, 72, 77, 170))
         p.restore()
-        p.setPen(QPen(QColor("#8b93a1"), 1))
+        p.setPen(QPen(QColor("#8d8d8d"), 1))
         for c in self.cuts:
             x = self._x(c)
             p.drawLine(QPointF(x, 6), QPointF(x, 24))

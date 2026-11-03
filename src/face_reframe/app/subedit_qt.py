@@ -99,7 +99,7 @@ class SubtitleEditor(QDialog):
                 it = QTableWidgetItem(val)
                 if c < 2:
                     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
-                    it.setForeground(QBrush(QColor("#8b93a1")))
+                    it.setForeground(QBrush(QColor("#8d8d8d")))
                 self.table.setItem(r, c, it)
         self._filling = False
         self.count.setText(tr("%d lines · %d words") % (len(self._rows), len(words)))
