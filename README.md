@@ -111,6 +111,16 @@ The honest trade-off: cloud tools offer web editors, team features and zero inst
 </tr>
 </table>
 
+## How it works
+
+Every step runs on your machine — no API calls, no upload:
+
+1. **Listen** — faster-whisper transcribes the audio once (cached on disk); Silero VAD or level thresholds mark pauses, breaths, filler words and retakes.
+2. **Look** — YuNet face detection + FaceMesh landmarks track every face per shot; optional ECAPA voice embeddings match *who is talking* to the right face.
+3. **Plan** — a virtual camera operator decides the crop: smoothing, dead zone, pan-speed limits, punch-ins on phrases, hard jump on cuts. Manual corrections, saliency following and picked-object tracking feed into the same plan.
+4. **Render** — FFmpeg + OpenCV compose the vertical frame: reframe, optional RVM/MODNet matting, neural enhancement, styled captions, LUT-baked colour grade, retimed audio.
+5. **Publish** — thumbnails, cover image, title/description/hashtags drafted from the transcript.
+
 ### 🧩 DaVinci Resolve scripts (free version included)
 
 Face Reframe (non-destructive Fusion keyframes or render), Cut Pauses/Fillers/Breaths/Retakes, Auto Subtitles, Punch In, Cinematic Audio, Normalize Audio/Color, Enhance, Duck Music, Sync Audio, Auto Markers, Split At Cuts and a one-dialog **Shorts Pipeline**.
@@ -183,6 +193,29 @@ Small ONNX models on CPU (OpenCV / onnxruntime). Some ship with the repo, the re
 | Speech | Silero VAD, faster-whisper | bundled |
 
 Licences: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — note that **CodeFormer and GPEN are for non-commercial use only**.
+
+## FAQ
+
+**Is my footage uploaded anywhere?**
+Never. Everything runs on your machine. Neural models download once on first use — after that the app works fully offline.
+
+**Does it add a watermark?**
+No. The only watermark is the one *you* optionally add (logo / CTA card).
+
+**Does it work on Windows or Linux?**
+macOS and Linux are supported; Windows is untested. The one-line installer targets macOS — from source it runs anywhere Python + FFmpeg run.
+
+**How long does an export take?**
+Roughly real-time to ~3× on an Apple M1 without face restoration. Neural options (face restore, MODNet matte, RIFE slow-mo) cost per frame — the "PC lento" preset keeps older machines usable.
+
+**Can I fix the automatic edit by hand?**
+Yes — drag on the timeline to select a range, cut or restore it (amber ranges sit on top of the automatic red cuts), trim the clip edges from the right-click menu. Every step is undoable and saved inside the project file.
+
+**Does it work on videos without faces, or already-vertical ones?**
+Yes. Faceless shots follow the most salient region (U²-Net-p) or an object you pick with a box; vertical sources can skip the reframe and still use the whole editing/captions pipeline.
+
+**What happens if a neural model is missing?**
+The app logs it and falls back to the classic method — exports never fail because of an optional model.
 
 ## Development
 
