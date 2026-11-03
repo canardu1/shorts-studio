@@ -32,6 +32,7 @@ Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for $15–30 a 
 ### Automatic editing
 - **Cut pauses** with a selectable speech detector — neural voice-activity detection (Silero VAD, bundled) or a classic level/dB threshold (automatic fallback if the model is missing) — plus **cut breaths**, **cut filler words** (*uhm, ehm, uh…*) and **cut retakes** (repeated lines — the last take wins).
 - **Best moments finder:** proposes the strongest 30–60 s clips of a long video (dense speech, a hook in the first sentence, ends on a full sentence) — **YAMNet audio events** boost clips with laughter, applause or music and mark them on the timeline.
+- **Manual timeline editing** on top of the automatic cuts: drag on the timeline to select a range, **X** or right-click → *Cut selection* removes it (shown in amber, stacked on the automatic red cuts); right-click → *Restore under selection* brings a manual cut back. The same menu **trims the clip** (start/end at the cursor) and the whole edit history is undoable and saved in projects.
 - **Clip ranges** and **batch processing** of a whole folder.
 
 ### Captions

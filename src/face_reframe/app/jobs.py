@@ -97,6 +97,8 @@ class JobSettings:
     person_by_file: Dict[str, List[np.ndarray]] = field(default_factory=dict)
     """Per-video "follow this person" picks (identity vectors), by abs path."""
     manual_by_file: Dict[str, Manual] = field(default_factory=dict)
+    manual_cuts_by_file: Dict[str, List[Tuple[float, float]]] = field(default_factory=dict)
+    """Hand-deleted ranges in SOURCE seconds per abs path (timeline edit)."""
     """Per-video hand corrections of the crop, in source frames/pixels."""
 
     overlays: "object" = None
@@ -565,7 +567,8 @@ def transcribe_file(path: str, language: Optional[str], cache: Optional[Analysis
     return words
 
 
-def cut_spans(pcm, duration: float, s: JobSettings, words, log: Log) -> Optional[List[Span]]:
+def cut_spans(pcm, duration: float, s: JobSettings, words, log: Log,
+              manual_cuts: Optional[List[Span]] = None) -> Optional[List[Span]]:
     """Kept spans (seconds) for the cut settings; ``None`` = nothing to cut."""
     from .. import silence
     spans = [(0.0, duration)]
@@ -575,7 +578,9 @@ def cut_spans(pcm, duration: float, s: JobSettings, words, log: Log) -> Optional
             spans = found
         else:
             log(tr("  no speech detected: pauses not cut"))
-    holes: List[Span] = []
+    holes: List[Span] = list(manual_cuts or [])
+    if holes:
+        log(tr("  %d manual cut%s") % (len(holes), "s" if len(holes) != 1 else ""))
     if s.cut_breaths:
         br = silence.breath_intervals(pcm, BreathParams(margin_db=s.speech.margin_db))
         holes += [(a - 0.03, b + 0.03) for a, b in br]
@@ -678,8 +683,19 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                 log(tr("  Whisper unavailable (%s): skipping fillers, retakes and captions") % exc)
                 words = None
         check()
-        if s.cuts and pcm is not None:
-            spans = cut_spans(pcm, duration, s, words, log)
+        mcuts = []
+        for a, b in s.manual_cuts_by_file.get(src_abs) or []:
+            # source seconds → seconds inside the (possibly trimmed) clip
+            c, d = (a - c0, b - c0) if clip is not None else (a, b)
+            if d > 0.02 and c < duration:
+                mcuts.append((max(0.0, c), min(duration, d)))
+        if (s.cuts and pcm is not None) or mcuts:
+            if s.cuts and pcm is not None:
+                spans = cut_spans(pcm, duration, s, words, log, manual_cuts=mcuts)
+            else:
+                spans = subtract([(0.0, duration)], mcuts)
+                if not spans or sum(b - a for a, b in spans) >= duration - 0.05:
+                    spans = None
             if spans is None:
                 log(tr("  nothing to cut"))
             else:

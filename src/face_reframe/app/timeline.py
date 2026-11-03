@@ -15,6 +15,8 @@ from ..i18n import tr
 
 class Timeline(QWidget):
     seek = Signal(int)
+    menu = Signal(float, object)
+    """Right-click: (seconds at cursor, global pos) for the edit menu."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -23,6 +25,13 @@ class Timeline(QWidget):
         self.setMouseTracking(True)
         self.n, self.fps = 1, 25.0
         self.removed: List[Tuple[float, float]] = []
+        self.mcuts: List[Tuple[float, float]] = []
+        """Hand-cut ranges in seconds — painted orange, kept separate from
+        the automatic (red) ones so the user sees what they deleted."""
+        self.sel: Optional[Tuple[float, float]] = None
+        """Selected range in seconds — drag to set, click elsewhere clears."""
+        self._press_t: Optional[float] = None
+        self._moved = False
         self.cuts: Sequence[int] = ()
         self.manual: Sequence[int] = ()
         self.events: Sequence[float] = ()
@@ -32,9 +41,10 @@ class Timeline(QWidget):
         self.pos = 0
 
     def set_data(self, n: int, fps: float, removed=None, cuts=(), manual=(), clip=None,
-                 words=False, events=()):
+                 words=False, events=(), mcuts=None):
         self.n, self.fps = max(1, n), fps or 25.0
         self.removed = list(removed or [])
+        self.mcuts = list(mcuts or [])
         self.cuts, self.manual, self.clip, self.words = list(cuts), list(manual), clip, words
         self.events = list(events)
         self.update()
@@ -62,6 +72,14 @@ class Timeline(QWidget):
         for a, b in self.removed:
             x0, x1 = self._x(a * self.fps), self._x(b * self.fps)
             p.fillRect(QRectF(x0, 9, max(1.0, x1 - x0), 12), QColor(229, 72, 77, 170))
+        for a, b in self.mcuts:
+            x0, x1 = self._x(a * self.fps), self._x(b * self.fps)
+            p.fillRect(QRectF(x0, 9, max(1.0, x1 - x0), 12), QColor(229, 160, 10, 200))
+        if self.sel is not None:
+            x0, x1 = self._x(self.sel[0] * self.fps), self._x(self.sel[1] * self.fps)
+            p.fillRect(QRectF(x0, 9, max(1.0, x1 - x0), 12), QColor(90, 200, 250, 90))
+            p.setPen(QPen(QColor("#5ac8fa"), 1))
+            p.drawRect(QRectF(x0, 9, max(1.0, x1 - x0), 12))
         p.restore()
         p.setPen(QPen(QColor("#8d8d8d"), 1))
         for c in self.cuts:
@@ -82,17 +100,50 @@ class Timeline(QWidget):
         p.setPen(pen)
         p.drawLine(QPointF(x, 4), QPointF(x, h - 4))
 
-    def _emit(self, ev):
+    def _t(self, ev) -> float:
         f = (ev.position().x() - 6) / max(1.0, self.width() - 12) * self.n
-        self.seek.emit(int(max(0, min(self.n - 1, f))))
+        return max(0.0, min(self.n - 1, f)) / self.fps
+
+    def _emit(self, ev):
+        self.seek.emit(int(self._t(ev) * self.fps))
 
     def mousePressEvent(self, ev):
-        self._emit(ev)
+        if ev.button() == Qt.RightButton:
+            self.menu.emit(self._t(ev), ev.globalPosition().toPoint())
+            return
+        if ev.button() == Qt.LeftButton:
+            self._press_t = self._t(ev)
+            self._moved = False
 
     def mouseMoveEvent(self, ev):
-        if ev.buttons() & Qt.LeftButton:
-            self._emit(ev)
+        if ev.buttons() & Qt.LeftButton and self._press_t is not None:
+            t = self._t(ev)
+            if abs(t - self._press_t) * self.fps * (self.width() - 12) / self.n > 4:
+                lo, hi = min(t, self._press_t), max(t, self._press_t)
+                if self.sel != (lo, hi):
+                    self.sel = (lo, hi)
+                    self.update()
+                self._moved = True
+            return
+        t = self._t(ev)
+        if any(a <= t < b for a, b in self.mcuts):
+            self.setToolTip(tr("Manual cut — right-click to restore"))
+        elif any(a <= t < b for a, b in self.removed):
+            self.setToolTip(tr("Cut part"))
         else:
-            t = (ev.position().x() - 6) / max(1.0, self.width() - 12) * self.n / self.fps
-            inside = any(a <= t < b for a, b in self.removed)
-            self.setToolTip(tr("Cut part") if inside else "")
+            self.setToolTip(tr("Drag to select · right-click to edit"))
+
+    def mouseReleaseEvent(self, ev):
+        if ev.button() != Qt.LeftButton or self._press_t is None:
+            return
+        if self._moved:
+            pass                # selection stays: the edit menu / keys act on it
+        else:
+            self.clear_sel()    # a click, not a drag: seek + drop any selection
+            self._emit(ev)
+        self._press_t = None
+        self._moved = False
+
+    def clear_sel(self):
+        self.sel = None
+        self.update()

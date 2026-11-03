@@ -22,7 +22,7 @@ from PySide6.QtGui import (QColor, QDesktopServices, QIcon, QImage, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractSpinBox, QApplication, QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox,
     QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
+    QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QScrollArea, QSlider, QSpinBox, QSplitter, QTabWidget, QToolButton, QVBoxLayout,
     QWidget,
 )
@@ -276,6 +276,7 @@ class MainWindow(QMainWindow):
         self._enh_key = None
         self.person_pick: Dict[str, list] = {}   # abs path -> identity vectors
         self.manual: Dict[str, list] = {}        # abs path -> [(frame, x, y)]
+        self.manual_cuts: Dict[str, list] = {}   # abs path -> [(a_s, b_s)] hand-cut ranges
         self._people = []
         self._people_for = None
         self.pcm = {}                            # abs path -> 16 kHz audio (current file only)
@@ -459,6 +460,7 @@ class MainWindow(QMainWindow):
 
         self.timeline = Timeline()
         self.timeline.seek.connect(self._seek)
+        self.timeline.menu.connect(self._timeline_menu)
         lay.addWidget(self.timeline)
 
         card = QFrame()
@@ -541,6 +543,12 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence.Undo, self, self._shortcut_undo)
         QShortcut(QKeySequence.Redo, self, self._shortcut_redo)
         QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self._shortcut_redo)
+        self.timeline.setFocusPolicy(Qt.ClickFocus)
+        for seq, fn in (("X", self._cut_sel), ("Backspace", self._restore_sel),
+                        ("Delete", self._restore_sel), ("Escape", self.timeline.clear_sel)):
+            sc = QShortcut(QKeySequence(seq), self.timeline)
+            sc.setContext(Qt.WidgetWithChildrenShortcut)
+            sc.activated.connect(fn)
         card_lay.addLayout(row)
         lay.addWidget(card)
         self.info_lab = hint("")
@@ -1117,6 +1125,7 @@ class MainWindow(QMainWindow):
             person_by_file=dict(self.person_pick),
             motion=self.motion_settings(),
             manual_by_file={k: list(m) for k, m in self.manual.items() if m},
+            manual_cuts_by_file={k: list(m) for k, m in self.manual_cuts.items() if m},
             preset=v("preset"), crf=int(v("crf")),
             slowmo=int(v("slowmo")), slowmo_engine=v("slowmo_engine"),
             output_dir=self.out_dir.text().strip() or None,
@@ -1631,6 +1640,14 @@ class MainWindow(QMainWindow):
             if spans:
                 edges = [0.0] + [t for sp in spans for t in sp] + [dur]
                 self.removed = [(a, b) for a, b in zip(edges[::2], edges[1::2]) if b - a > 0.02]
+        mcuts = self.manual_cuts.get(key) or []
+        if mcuts and self.clip_range is None:
+            self.removed = sorted(self.removed + [(a, b) for a, b in mcuts])
+        elif mcuts:
+            c0f = self.clip_range[0] / fps
+            c1f = self.clip_range[1] / fps
+            self.removed = sorted(self.removed + [(max(c0f, a), min(c1f, b))
+                                                  for a, b in mcuts if b > c0f and a < c1f])
         a = self.cache.get(self.current, self.reframe_options())
         cuts, info = [], ""
         if a is None:
@@ -1759,7 +1776,8 @@ class MainWindow(QMainWindow):
         events = [vsegs[i][0] for i in range(1, len(vsegs))
                   if vsegs[i][2] != vsegs[i - 1][2] and vsegs[i][2] >= 0]
         self.timeline.set_data(self.reader.count, fps, self.removed, cuts, [m[0] for m in man],
-                               self.clip_range, bool(words), events=events)
+                               self.clip_range, bool(words), events=events,
+                               mcuts=self.manual_cuts.get(key) or [])
         self._show_frame(self.slider.value())
 
     def _preview_size(self):
@@ -2679,6 +2697,13 @@ class MainWindow(QMainWindow):
     def _state_of(self, kind, key):
         if kind == "manual":
             return list(self.manual.get(key, []))
+        if kind == "mcuts":
+            return list(self.manual_cuts.get(key, []))
+        if kind == "clip":
+            for d in self._items():
+                if d and os.path.abspath(d["path"]) == key:
+                    return d.get("clip")
+            return None
         if kind == "person":
             return self.person_pick.get(key)
         if kind == "hook":
@@ -2694,6 +2719,18 @@ class MainWindow(QMainWindow):
                 self.manual[key] = list(val)
             else:
                 self.manual.pop(key, None)
+        elif kind == "mcuts":
+            if val:
+                self.manual_cuts[key] = list(val)
+            else:
+                self.manual_cuts.pop(key, None)
+        elif kind == "clip":
+            for d in self._items():
+                if d and os.path.abspath(d["path"]) == key:
+                    if val:
+                        d["clip"] = tuple(val)
+                    else:
+                        d.pop("clip", None)
         elif kind == "person":
             if val:
                 self.person_pick[key] = val
@@ -2769,6 +2806,7 @@ class MainWindow(QMainWindow):
             "app": "Shorts Studio", "version": 1, "items": items, "options": opts,
             "person_pick": {k: sigs(v) for k, v in self.person_pick.items() if v},
             "manual": {k: [[m[0], m[1], m[2]] for m in v] for k, v in self.manual.items() if v},
+            "manual_cuts": {k: [[m[0], m[1]] for m in v] for k, v in self.manual_cuts.items() if v},
             "hook_text": {k: t for k, t in self.hook_text.items() if t},
             "music": self.music_path or "", "logo": self.logo_path or "", "cta": self.cta_edit.text(),
             "out_dir": self.out_dir.text(), "suffix": self.suffix.text(),
@@ -2798,6 +2836,8 @@ class MainWindow(QMainWindow):
         self.person_pick = {k: [np.asarray(x, dtype=np.float32) for x in v]
                             for k, v in (d.get("person_pick") or {}).items()}
         self.manual = {k: [(int(m[0]), m[1], m[2]) for m in v] for k, v in (d.get("manual") or {}).items()}
+        self.manual_cuts = {k: [(float(m[0]), float(m[1])) for m in v]
+                            for k, v in (d.get("manual_cuts") or {}).items()}
         self.hook_text = dict(d.get("hook_text") or {})
         self._set_music(d.get("music") or "")
         self._set_logo(d.get("logo") or "")
@@ -3031,6 +3071,129 @@ class MainWindow(QMainWindow):
                 self._push_undo(tr("Clear all corrections"), "manual", key, list(self.manual[key]))
             self.manual.pop(key, None)
             self._replan()
+
+    # -------------------------------------------------- timeline editing
+    def _timeline_menu(self, t: float, pos):
+        m = QMenu(self)
+        key = os.path.abspath(self.current) if self.current else ""
+        sel = self.timeline.sel
+        mcuts = self.manual_cuts.get(key) or []
+        it = self.queue.currentItem()
+        data = it.data(Qt.UserRole) if it else None
+        a_cut = m.addAction(tr("Cut selection") + "\tX")
+        a_cut.setEnabled(sel is not None)
+        a_res = m.addAction(tr("Restore under selection") + "\t⌫")
+        a_res.setEnabled(sel is not None and any(a < sel[1] and b > sel[0] for a, b in mcuts))
+        a_clr = m.addAction(tr("Clear manual cuts"))
+        a_clr.setEnabled(bool(mcuts))
+        m.addSeparator()
+        a_in = m.addAction(tr("Set clip start at %s") % _fmt(t))
+        a_out = m.addAction(tr("Set clip end at %s") % _fmt(t))
+        a_in.setEnabled(data is not None)
+        a_out.setEnabled(data is not None)
+        a_trim = m.addAction(tr("Clear clip trim"))
+        a_trim.setEnabled(bool(data and data.get("clip")))
+        pick = m.exec_(pos)
+        if pick is None:
+            return
+        if pick is a_cut:
+            self._cut_sel()
+        elif pick is a_res:
+            self._restore_sel()
+        elif pick is a_clr:
+            self._clear_mcuts()
+        elif pick is a_in:
+            self._clip_edge(True, t)
+        elif pick is a_out:
+            self._clip_edge(False, t)
+        elif pick is a_trim:
+            self._clear_trim()
+
+    def _cur_item(self):
+        it = self.queue.currentItem()
+        return it.data(Qt.UserRole) if it else None
+
+    def _cut_sel(self):
+        sel = self.timeline.sel
+        if sel is None or not self.current:
+            return
+        key = os.path.abspath(self.current)
+        old = list(self.manual_cuts.get(key, []))
+        mcuts = sorted(old + [sel])
+        merged = [list(mcuts[0])]
+        for a, b in mcuts[1:]:
+            if a <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], b)
+            else:
+                merged.append([a, b])
+        self._push_undo(tr("Manual cut"), "mcuts", key, old)
+        self.manual_cuts[key] = [tuple(m) for m in merged]
+        self.timeline.clear_sel()
+        self._log(tr("Cut %s–%s (manual)") % (_fmt(sel[0]), _fmt(sel[1])))
+        self._replan()
+
+    def _restore_sel(self):
+        sel = self.timeline.sel
+        if sel is None or not self.current:
+            return
+        key = os.path.abspath(self.current)
+        old = list(self.manual_cuts.get(key, []))
+        out = []
+        for a, b in old:
+            if b <= sel[0] or a >= sel[1]:
+                out.append((a, b))
+                continue
+            if a < sel[0]:
+                out.append((a, sel[0]))
+            if b > sel[1]:
+                out.append((sel[1], b))
+        if out == old:
+            return
+        self._push_undo(tr("Restore cut"), "mcuts", key, old)
+        if out:
+            self.manual_cuts[key] = out
+        else:
+            self.manual_cuts.pop(key, None)
+        self.timeline.clear_sel()
+        self._log(tr("Restored"))
+        self._replan()
+
+    def _clear_mcuts(self):
+        if not self.current:
+            return
+        key = os.path.abspath(self.current)
+        old = self.manual_cuts.pop(key, None)
+        if old:
+            self._push_undo(tr("Clear manual cuts"), "mcuts", key, old)
+            self._replan()
+
+    def _clip_edge(self, is_start: bool, t: float):
+        it, data = self.queue.currentItem(), self._cur_item()
+        if it is None or data is None or not self.reader:
+            return
+        dur = self.reader.count / self.reader.fps
+        a, b = data.get("clip") or (0.0, dur)
+        a, b = (t, b) if is_start else (a, t)
+        a, b = max(0.0, a), min(dur, b)
+        if b - a < 0.3:
+            self._log(tr("Clip too short — keep at least 0.3 s"))
+            return
+        old = data.get("clip")
+        self._push_undo(tr("Clip trim"), "clip", os.path.abspath(self.current), old)
+        if a <= 0.05 and b >= dur - 0.05:
+            data.pop("clip", None)
+        else:
+            data["clip"] = (a, b)
+        self._log(tr("Clip %s–%s") % (_fmt(a), _fmt(b)))
+        self._select(it)        # reload with the new clip range
+
+    def _clear_trim(self):
+        data = self._cur_item()
+        if data is None or not data.get("clip"):
+            return
+        self._push_undo(tr("Clear clip trim"), "clip", os.path.abspath(self.current), data["clip"])
+        data.pop("clip", None)
+        self._select(self.queue.currentItem())
 
     # ================================================================ batch
     def _start(self):
