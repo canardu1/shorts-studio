@@ -8,7 +8,7 @@ pass uses, so the "follow object" camera logic applies unchanged.
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from . import models
 from .i18n import tr
@@ -40,10 +40,14 @@ def _tracker():
     return cv2.TrackerNano_create(p)
 
 
-def _run(cap, grid_set, f0: int, f1: int, step: int, first_box,
-         total: int) -> Dict[int, Tuple[float, float, float, float]]:
-    """Track frame-by-frame from f0 to f1 (exclusive), recording the box at
-    every frame in ``grid_set``. Stops when the tracker loses the object."""
+def _box(r) -> Tuple[float, float, float, float]:
+    return (float(r[0] + r[2] / 2), float(r[1] + r[3] / 2), float(r[2]), float(r[3]))
+
+
+def _forward(cap, grid_set, f0: int, last: int, first_box,
+             off: int, progress=None) -> Dict[int, Tuple[float, float, float, float]]:
+    """Track forward from ``f0`` with sequential reads (no per-frame seeks —
+    each set() on a long-GOP file can cost a keyframe re-decode)."""
     import cv2
     out = {}
     tr = _tracker()
@@ -51,15 +55,41 @@ def _run(cap, grid_set, f0: int, f1: int, step: int, first_box,
     ok, frame = cap.read()
     if not ok:
         return out
-    # TrackerNano wants an int (x, y, w, h) rect — floats fail the binding
     tr.init(frame, tuple(int(round(v)) for v in first_box))
-    if f0 in grid_set:
-        out[f0] = first_box
+    if f0 - off in grid_set:
+        out[f0 - off] = first_box
     f = f0
-    while True:
-        f += step
-        if not (0 <= f <= f1 if step > 0 else f1 <= f < total):
+    while f < last:
+        ok, frame = cap.read()
+        if not ok:
             break
+        f += 1
+        good, r = tr.update(frame)
+        if not good or min(r[2], r[3]) < MIN_SIDE:
+            break
+        rel = f - off
+        if rel in grid_set:
+            out[rel] = _box(r)
+        if progress and f % 25 == 0:
+            progress(f)
+    return out
+
+
+def _backward(cap, grid_set, f0: int, first_box, off: int,
+              progress=None) -> Dict[int, Tuple[float, float, float, float]]:
+    """Track backward from ``f0``: cv2 can't step backwards, so this seeks
+    one frame at a time (each set() can re-decode a GOP on heavy files)."""
+    import cv2
+    out = {}
+    tr = _tracker()
+    cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
+    ok, frame = cap.read()
+    if not ok:
+        return out
+    tr.init(frame, tuple(int(round(v)) for v in first_box))
+    f = f0
+    while f > 0:
+        f -= 1
         cap.set(cv2.CAP_PROP_POS_FRAMES, f)
         ok, frame = cap.read()
         if not ok:
@@ -67,16 +97,18 @@ def _run(cap, grid_set, f0: int, f1: int, step: int, first_box,
         good, r = tr.update(frame)
         if not good or min(r[2], r[3]) < MIN_SIDE:
             break
-        if f in grid_set:
-            out[f] = (float(r[0] + r[2] / 2), float(r[1] + r[3] / 2),
-                      float(r[2]), float(r[3]))
+        rel = f - off
+        if rel in grid_set:
+            out[rel] = _box(r)
+        if progress and f % 25 == 0:
+            progress(f)
     return out
 
 
-def track(path: str, start_frame: int, box: Tuple[float, float, float, float],
-          samples, log=print, progress=None) -> int:
+def track(path: str, start_abs: int, box: Tuple[float, float, float, float],
+          analysis, log=print, progress=None) -> int:
     """Fill ``sample.salient`` with the tracked box, forward and backward
-    from ``start_frame`` (relative frame numbers, as the analysis uses).
+    from ``start_abs`` (absolute frame number, as the slider reports).
     Returns how many samples got a box."""
     import cv2
     if not ensure(progress, log):
@@ -85,16 +117,45 @@ def track(path: str, start_frame: int, box: Tuple[float, float, float, float],
     if not cap.isOpened():
         return 0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-    grid = {smp.frame for smp in samples}
+    off = int(getattr(analysis, "start_frame", 0))
+    grid = {smp.frame for smp in analysis.samples}
     if not grid or total <= 0:
         cap.release()
         return 0
-    start_frame = min(max(0, start_frame), total - 1)
-    boxes = _run(cap, grid, start_frame, total - 1, 1, box, total)
-    if start_frame > 0:
-        boxes.update(_run(cap, grid, start_frame, 0, -1, box, total))
+    start_abs = min(max(0, start_abs), total - 1)
+    lo, hi = off, off + getattr(analysis, "frame_count", total) - 1
+    if not (lo <= start_abs <= hi):
+        log(tr("Pick a frame inside the analysed range"))
+        cap.release()
+        return 0
+    last = min(total - 1, hi)
+    fwd_span = max(1, last - start_abs)
+    bwd_span = max(0, start_abs - off)
+    span = fwd_span + bwd_span
+
+    def fwd_prog(f):
+        if progress:
+            progress(min(0.99, (f - start_abs) / span))
+
+    def bwd_prog(f):
+        if progress:
+            progress(min(0.99, (fwd_span + start_abs - f) / span))
+
+    if progress:
+        progress(0.0)
+    boxes = _forward(cap, grid, start_abs, last, box, off, fwd_prog)
+    if bwd_span:
+        boxes.update(_backward(cap, grid, start_abs, box, off, bwd_prog))
     cap.release()
-    by = {smp.frame: smp for smp in samples}
-    for f, b in boxes.items():
-        by[f].salient = b
-    return len(boxes)
+    if progress:
+        progress(1.0)
+
+    by = {smp.frame: smp for smp in analysis.samples}
+    for rel, b in boxes.items():
+        if rel in by:
+            by[rel].salient = b
+    n = len([rel for rel in boxes if rel in by])
+    covered = n * (sorted(grid)[1] - sorted(grid)[0] if len(grid) > 1 else 1)
+    log(tr("Tracked %d sample%s (~%.1f s of video)") % (
+        n, "s" if n != 1 else "", covered / (getattr(analysis, "fps", 25.0) or 25.0)))
+    return n

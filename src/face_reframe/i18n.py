@@ -632,6 +632,11 @@ _IT = {
         "Rilevamento oggetto non disponibile (offline): resto centrato",
     "Object tracking needs OpenCV with NanoTrack support":
         "Il tracciamento oggetto richiede OpenCV con supporto NanoTrack",
+    "Tracking the object over the video…": "Traccio l'oggetto nel video…",
+    "Pick a frame inside the analysed range":
+        "Scegli un fotogramma dentro l'intervallo analizzato",
+    "Tracked %d sample%s (~%.1f s of video)":
+        "Tracciati %d campion%s (~%.1f s di video)",
     "Speaker engine": "Motore parlato",
     "Mouth motion": "Movimento labbra",
     "Voice ID (neural)": "ID voce (neurale)",

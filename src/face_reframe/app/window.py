@@ -1920,14 +1920,15 @@ class MainWindow(QMainWindow):
             return
         k = getattr(self, "_view_k", 1.0) or 1.0
         box = (x / k, y / k, max(8.0, w / k), max(8.0, h / k))
-        start = max(0, self.slider.value() - getattr(a, "start_frame", 0))
+        start = self.slider.value()
         if self._busy(tr("Object tracking")):
             return
+        self._log(tr("Tracking the object over the video…"))
         path, analysis = self.current, a
 
         def job(progress):
             from ..objtrack import track
-            n = track(path, start, box, analysis.samples, self._log, progress)
+            n = track(path, start, box, analysis, self._log, progress)
             analysis.salient_pass = True
             return n
 
