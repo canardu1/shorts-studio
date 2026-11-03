@@ -129,6 +129,10 @@ Face Reframe (non-destructive Fusion keyframes or render), Cut Pauses/Fillers/Br
 
 ## Quick start
 
+### Download the app (no install) — macOS
+
+Grab **`ShortsStudio-macOS-arm64.zip`** from the [latest release](https://github.com/canardu1/shorts-studio/releases/latest), unzip, drag **Shorts Studio** to Applications. First launch: **right-click → Open** (the app is unsigned — macOS asks once, then it runs normally). Apple Silicon only; on Intel Macs use the installer below.
+
 ### macOS — one command
 
 ```bash
