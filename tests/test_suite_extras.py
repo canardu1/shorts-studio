@@ -58,6 +58,23 @@ def test_look_tables():
     assert wb[..., 2].mean() > img[..., 2].mean()
 
 
+def test_grade_controls():
+    rng = np.random.default_rng(0)
+    img = rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)
+    # neutral grade is a no-op: the frame is returned untouched
+    assert look.apply(img, look.Look("none", 1.0, None, look.Grade())) is img
+    # a grade alone (no preset) activates the Look and shifts pixels
+    g = look.Grade(temp=0.6, exposure=0.4, contrast=1.2, saturation=1.3)
+    out = look.apply(img, look.Look("none", 1.0, None, g)).astype(int)
+    assert not np.array_equal(out, img.astype(int))
+    assert out[..., 2].mean() > img[..., 2].mean()   # warm temp lifts red
+    # vignette darkens edges more than the centre
+    v = look.apply(img, look.Look("none", 1.0, None, look.Grade(vignette=0.8))).astype(int)
+    assert v[0, 0].mean() < v[32, 32].mean()
+    # vignette without any LUT ops still runs (spatial-only grade)
+    assert not np.array_equal(v, img.astype(int))
+
+
 def test_timemap_inverse_and_source_frames():
     tm = TimeMap([(0.0, 1.0), (2.0, 3.0)])
     assert tm.inverse(0.5) == pytest.approx(0.5) and tm.inverse(1.5) == pytest.approx(2.5)

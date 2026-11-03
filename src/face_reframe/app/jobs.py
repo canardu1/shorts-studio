@@ -107,6 +107,8 @@ class JobSettings:
     look: str = "none"
     look_strength: float = 1.0
     auto_wb: bool = False
+    grade: object = None
+    """:class:`look.Grade` manual grading (temperature, exposure, contrast…), or None."""
     stabilize: bool = False
     stab_amount: float = 0.8
     bg_blur: float = 0.0
@@ -770,11 +772,13 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
             log(tr("Captions: %d lines -> %s") % (len(events), os.path.basename(srt)))
 
         look_obj = None
-        if s.look != "none" or s.auto_wb:
+        grade_on = s.grade is not None and (s.grade.active or s.grade.vignette > 0)
+        if s.look != "none" or s.auto_wb or grade_on:
             from .look import Look, auto_gains
             gains = auto_gains(cur) if s.auto_wb else None
-            look_obj = Look(s.look, s.look_strength, gains)
-            log(tr("Colour: look %s%s") % (s.look, tr(", auto balance") if gains else ""))
+            look_obj = Look(s.look, s.look_strength, gains, s.grade)
+            log(tr("Colour: look %s%s%s") % (s.look, tr(", auto balance") if gains else "",
+                                           tr(", grade") if grade_on else ""))
         stab = None
         if s.stabilize:
             from .stabilize import estimate

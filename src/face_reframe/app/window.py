@@ -725,17 +725,8 @@ class MainWindow(QMainWindow):
         f.addRow(self.skin_lab)
         f.addRow(cube)
         f.addRow(hint(tr("Measures cheeks and forehead, then pulls the tint back to the natural skin line and removes excess saturation, only on skin colours: red clothes and background stay as they were. Useful for cameras that make skin too red.")))
-        from .look import LOOKS
-        W["look"] = combo(LOOKS)
-        W["look_strength"] = dspin(0, 1, 0.05, 1.0)
-        W["auto_wb"] = QCheckBox(tr("Auto white balance & exposure"))
         W["stabilize"] = QCheckBox(tr("Stabilize shaky footage"))
         W["stab_amount"] = dspin(0.1, 1.0, 0.05, 0.8)
-        f.addRow(section(tr("Colour")))
-        f.addRow(tr("Look"), W["look"])
-        f.addRow(tr("Look strength"), W["look_strength"])
-        f.addRow(W["auto_wb"])
-        f.addRow(hint(tr("Auto balance evens out colour and exposure: handy to give shorts of the same series the same look.")))
         f.addRow(section(tr("Stabilization")))
         f.addRow(W["stabilize"])
         f.addRow(tr("Strength"), W["stab_amount"])
@@ -782,6 +773,40 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Min distance"), W["mv_gap"])
         f.addRow(hint(tr("Crash zoom uses the transcript's strong words (questions, exclamations, numbers, “never”, “secret”…) or, without a transcript, voice peaks. Cuts are the shot changes and the pause cuts. Everything is previewed in play; export cost is nearly zero.")))
         tabs.addTab(self._page(f), tr("Effects"))
+
+        # --- colour
+        f = QFormLayout()
+        from .look import LOOKS
+        W["look"] = combo(LOOKS)
+        W["look_strength"] = dspin(0, 1, 0.05, 1.0)
+        W["auto_wb"] = QCheckBox(tr("Auto white balance and exposure"))
+        f.addRow(section(tr("Look")))
+        f.addRow(tr("Preset"), W["look"])
+        f.addRow(tr("Strength"), W["look_strength"])
+        f.addRow(W["auto_wb"])
+        f.addRow(hint(tr("Auto balance evens out colour and exposure: handy to give shorts of the same series the same look.")))
+        W["color_temp"] = dspin(-1, 1, 0.05, 0.0)
+        W["color_tint"] = dspin(-1, 1, 0.05, 0.0)
+        W["color_exp"] = dspin(-1, 1, 0.05, 0.0)
+        W["color_con"] = dspin(0, 2, 0.05, 1.0)
+        W["color_sat"] = dspin(0, 2, 0.05, 1.0)
+        W["color_shad"] = dspin(-1, 1, 0.05, 0.0)
+        W["color_high"] = dspin(-1, 1, 0.05, 0.0)
+        W["color_vig"] = dspin(0, 1, 0.05, 0.0)
+        f.addRow(section(tr("Grade")))
+        f.addRow(tr("Temperature"), W["color_temp"])
+        f.addRow(tr("Tint"), W["color_tint"])
+        f.addRow(tr("Exposure"), W["color_exp"])
+        f.addRow(tr("Contrast"), W["color_con"])
+        f.addRow(tr("Saturation"), W["color_sat"])
+        f.addRow(tr("Shadows"), W["color_shad"])
+        f.addRow(tr("Highlights"), W["color_high"])
+        f.addRow(tr("Vignette"), W["color_vig"])
+        res = QPushButton(tr("Reset grade"))
+        res.clicked.connect(self._reset_grade)
+        f.addRow(res)
+        f.addRow(hint(tr("Fine-tune the picture on top of the preset: the grade is baked into the same fast transform — export cost is nearly zero.")))
+        tabs.addTab(self._page(f), tr("Color"))
 
         # --- subtitles
         f = QFormLayout()
@@ -902,7 +927,7 @@ class MainWindow(QMainWindow):
         return col
 
     RAIL = [("crop", "Crop"), ("cut", "Cuts"), ("audio", "Audio"), ("quality", "Quality"),
-            ("effects", "Effects"), ("texts", "Texts"), ("export", "Export")]
+            ("effects", "Effects"), ("color", "Color"), ("texts", "Texts"), ("export", "Export")]
 
     def _build_rail(self, tabs):
         w = QWidget()
@@ -1020,6 +1045,7 @@ class MainWindow(QMainWindow):
         )
 
     def job_settings(self) -> JobSettings:
+        from .look import Grade
         v = self._val
         formats = [a for k, a in (("fmt_45", "4:5"), ("fmt_11", "1:1"), ("fmt_169", "16:9")) if v(k)]
         return JobSettings(
@@ -1032,6 +1058,9 @@ class MainWindow(QMainWindow):
             hook_by_file=dict(self.hook_text),
             cover=v("cover"), social=v("social"), sub_lang=v("sub_lang"),
             look=v("look"), look_strength=v("look_strength"), auto_wb=v("auto_wb"),
+            grade=Grade(temp=v("color_temp"), tint=v("color_tint"), exposure=v("color_exp"),
+                        contrast=v("color_con"), saturation=v("color_sat"),
+                        shadows=v("color_shad"), highlights=v("color_high"), vignette=v("color_vig")),
             stabilize=v("stabilize"), stab_amount=v("stab_amount"), encoder=v("encoder"),
             bg_blur=v("bg_blur_amount") if v("bg_blur") else 0.0,
             restore=v("restore"), restore_blend=v("restore_blend"), restore_fidelity=v("restore_fidelity"),
@@ -1657,9 +1686,11 @@ class MainWindow(QMainWindow):
             from .overlays import Chain
             self._burner = Chain(parts)
         self._look = None
-        if s.look != "none" or s.auto_wb:
+        grade_on = s.grade is not None and (s.grade.active or s.grade.vignette > 0)
+        if s.look != "none" or s.auto_wb or grade_on:
             from .look import Look
-            self._look = Look(s.look, s.look_strength, self._gains_for() if s.auto_wb else None)
+            self._look = Look(s.look, s.look_strength,
+                              self._gains_for() if s.auto_wb else None, s.grade)
         man = self.manual.get(key) or []
         if man:
             info += tr(" · %d manual corrections") % len(man)
@@ -2347,6 +2378,12 @@ class MainWindow(QMainWindow):
         else:
             self.person_pick.pop(path, None)
         self._replan()
+
+    def _reset_grade(self):
+        for k in ("color_temp", "color_tint", "color_exp", "color_shad", "color_high", "color_vig"):
+            self._set(k, 0.0)
+        self._set("color_con", 1.0)
+        self._set("color_sat", 1.0)
 
     # ---------------------------------------------------------- look / stab / titles
     def _title_renderer(self):
@@ -3139,6 +3176,13 @@ def _pixmap(kind: str, color: str) -> QPixmap:
         pt.drawEllipse(QPointF(20, 20), 1.6, 1.6)
         pt.drawEllipse(QPointF(10, 9), 1.6, 1.6)
         pt.drawEllipse(QPointF(24, 16), 1.3, 1.3)
+    elif kind == "color":
+        pt.setPen(line)
+        pt.setBrush(Qt.NoBrush)
+        pt.drawEllipse(QRectF(8, 8, 16, 16))
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        pt.drawChord(QRectF(9, 9, 14, 14), 180 * 16, 180 * 16)
     elif kind == "texts":
         pt.setPen(QPen(c, 2.6, Qt.SolidLine, Qt.RoundCap))
         for y, x2 in ((10, 24), (16, 20), (22, 15)):

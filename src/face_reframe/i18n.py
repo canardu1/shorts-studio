@@ -208,11 +208,28 @@ _IT = {
         "Misura guance e fronte, poi riporta la tinta sulla linea naturale della pelle "
         "e toglie la saturazione in eccesso, solo sui colori della pelle: vestiti "
         "rossi e sfondo restano com'erano. Utile per camere che fanno la pelle troppo rossa.",
-    "Auto white balance & exposure": "Bilanciamento bianco ed esposizione automatici",
+    "Auto white balance and exposure": "Bilanciamento bianco ed esposizione automatici",
     "Stabilize shaky footage": "Stabilizza le riprese mosse",
     "Colour": "Colore",
     "Look": "Look",
     "Look strength": "Intensità look",
+    "Color": "Colore",
+    "Preset": "Preset",
+    "Grade": "Correzione",
+    "Temperature": "Temperatura",
+    "Tint": "Tinta",
+    "Exposure": "Esposizione",
+    "Contrast": "Contrasto",
+    "Saturation": "Saturazione",
+    "Shadows": "Ombre",
+    "Highlights": "Alte luci",
+    "Vignette": "Vignettatura",
+    "Reset grade": "Azzera correzione",
+    ", grade": ", correzione",
+    "Fine-tune the picture on top of the preset: the grade is baked into the same "
+    "fast transform — export cost is nearly zero.":
+        "Rifinisci l'immagine sopra il preset: la correzione entra nella stessa "
+        "trasformazione veloce — costo di export quasi nullo.",
     "Auto balance evens out colour and exposure: handy to give shorts of the same "
     "series the same look.":
         "Il bilanciamento automatico pareggia colore ed esposizione: utile per avere "
