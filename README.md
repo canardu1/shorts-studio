@@ -15,7 +15,7 @@
 
 <br>
 
-Face-following reframe, automatic jump cuts, word-by-word captions, cinematic audio, face restoration, camera moves and click-worthy thumbnails — one dark, quiet desktop app. The same engine also ships as **free scripts for DaVinci Resolve** (works on the free version too).
+Face-following reframe, automatic jump cuts, word-by-word captions, cinematic audio, face restoration, camera moves and click-worthy thumbnails — one dark, quiet desktop app. **A free, open-source alternative to OpusClip, Submagic and CapCut Pro** that turns podcasts, interviews, streams and long recordings into ready-to-post TikTok, Instagram Reels and YouTube Shorts clips. The same engine also ships as **free scripts for DaVinci Resolve** (works on the free version too).
 
 ## See it in action
 
@@ -29,13 +29,25 @@ Face-following reframe, automatic jump cuts, word-by-word captions, cinematic au
 </p>
 
 <p align="center"><sub>
-Face-following reframe · captions + punch-in · manual timeline cuts · auto thumbnails<br>
+Automatic 16:9 → 9:16 reframe · word-by-word captions + punch-in · manual timeline cuts · auto thumbnails<br>
 <i>Demo clips generated from your own footage — see <a href="docs/media/README.md">docs/media</a></i>
 </sub></p>
 
-## Why
+## A free, offline alternative to OpusClip & CapCut
 
 Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for **$15–30 a month**. Shorts Studio runs **locally** — your footage never leaves the machine, it works **offline** after the first model download, and it processes a whole folder in **batch** while you do something else.
+
+| | **Shorts Studio** | OpusClip · Submagic · CapCut Pro |
+|---|---|---|
+| **Price** | Free · GPL-3.0 | $15–30/month subscription |
+| **Processing** | 100% local — works offline | Upload to their cloud |
+| **Privacy** | Footage never leaves your disk | Your videos on their servers |
+| **Batch** | Whole folder, unattended | Mostly per-video |
+| **Fine editing** | Manual timeline cuts + automatic | Mostly automatic only |
+| **Runs on** | Your Mac/PC, no account | Browser, account required |
+| **DaVinci Resolve** | Free companion scripts | — |
+
+The honest trade-off: cloud tools offer web editors, team features and zero install. Shorts Studio is for creators who'd rather keep the footage — and the money — on their own machine.
 
 ## Features
 
