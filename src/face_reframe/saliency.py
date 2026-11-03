@@ -33,7 +33,7 @@ class Saliency:
         import cv2
         x = cv2.resize(img, (320, 320), interpolation=cv2.INTER_AREA)[..., ::-1].astype(np.float32) / 255.0
         x = (x - (0.485, 0.456, 0.406)) / (0.229, 0.224, 0.225)
-        out = self.sess.run(None, {self.inp: x.transpose(2, 0, 1)[None]})[0][0, 0]
+        out = self.sess.run(None, {self.inp: x.transpose(2, 0, 1)[None].astype(np.float32)})[0][0, 0]
         out = (out - out.min()) / max(1e-6, float(out.max() - out.min()))
         return out.astype(np.float32)
 

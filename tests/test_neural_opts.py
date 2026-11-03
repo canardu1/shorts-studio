@@ -75,3 +75,27 @@ def test_lowlight_lifter_blends_strength(monkeypatch):
     l1 = lowlight.Lifter("sg_llie", 1.0)
     assert np.array_equal(l0(src), src)
     assert (l1(src) == 255).all()
+
+
+def test_saliency_feeds_float32(monkeypatch):
+    """The normalization step must not promote the input to float64 — ONNX
+    rejects tensor(double). Regression test for the tuple-subtraction bug."""
+    from face_reframe import models, saliency
+
+    fed = {}
+
+    class _Inp:
+        name = "in"
+
+    class FakeSess:
+        def get_inputs(self):
+            return [_Inp()]
+
+        def run(self, _out, feed):
+            fed["x"] = feed["in"]
+            return [np.zeros((1, 1, 320, 320), np.float32)]
+
+    monkeypatch.setattr(models, "session", lambda key: FakeSess())
+    s = saliency.Saliency()
+    s.map(np.zeros((90, 160, 3), np.uint8))
+    assert fed["x"].dtype == np.float32
