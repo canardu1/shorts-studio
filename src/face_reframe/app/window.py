@@ -2984,7 +2984,10 @@ QComboBox QAbstractItemView::item:selected { background: #40343a; color: #fff; }
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
     width: 18px; border-left: 1px solid #242424; background: transparent;
 }
+QAbstractSpinBox::up-button { image: url(__PLUS__); }
+QAbstractSpinBox::down-button { image: url(__MINUS__); }
 QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover { background: #252525; }
+QComboBox::down-arrow { image: url(__ARROW__); width: 9px; height: 9px; }
 
 /* ---------- segmented ---------- */
 QWidget#segbox { background: #171717; border: 1px solid #272727; border-radius: 8px; }
@@ -3171,20 +3174,43 @@ def _rail_icon(kind: str) -> QIcon:
     return ic
 
 
-def _check_png() -> str:
-    """White check glyph drawn once into the app cache: QSS needs an image
-    file to put a ✓ inside the checkbox indicator."""
-    p = os.path.join(diskcache.cache_dir(), "check.png")
-    if not os.path.exists(p):
-        img = QImage(32, 32, QImage.Format_ARGB32)
-        img.fill(Qt.transparent)
-        pt = QPainter(img)
-        pt.setRenderHint(QPainter.Antialiasing)
-        pt.setPen(QPen(Qt.white, 6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        pt.drawPolyline(QPolygonF([QPointF(9, 17), QPointF(14, 23), QPointF(24, 9)]))
-        pt.end()
-        img.save(p)
-    return p
+def _ui_pngs() -> dict:
+    """Small UI glyphs drawn once into the app cache: QSS needs image files
+    for the checkbox ✓, and the native spin +/− / combo-arrow glyphs come
+    out dark on a dark theme (unreadable), so we supply our own."""
+    d = diskcache.cache_dir()
+    gray, white = QColor("#c7c7c7"), QColor("#ffffff")
+
+    def draw(name, fn, pen):
+        p = os.path.join(d, name)
+        if not os.path.exists(p):
+            img = QImage(32, 32, QImage.Format_ARGB32)
+            img.fill(Qt.transparent)
+            pt = QPainter(img)
+            pt.setRenderHint(QPainter.Antialiasing)
+            pt.setPen(pen)
+            fn(pt)
+            pt.end()
+            img.save(p)
+        return p
+
+    return {
+        "check": draw("check.png",
+                      lambda pt: pt.drawPolyline(QPolygonF(
+                          [QPointF(9, 17), QPointF(14, 23), QPointF(24, 9)])),
+                      QPen(white, 6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)),
+        "spin_plus": draw("spin_plus.png",
+                          lambda pt: (pt.drawLine(QPointF(16, 9), QPointF(16, 23)),
+                                      pt.drawLine(QPointF(9, 16), QPointF(23, 16))),
+                          QPen(gray, 4, Qt.SolidLine, Qt.RoundCap)),
+        "spin_minus": draw("spin_minus.png",
+                           lambda pt: pt.drawLine(QPointF(9, 16), QPointF(23, 16)),
+                           QPen(gray, 4, Qt.SolidLine, Qt.RoundCap)),
+        "combo_down": draw("combo_down.png",
+                           lambda pt: pt.drawPolyline(QPolygonF(
+                               [QPointF(9, 13), QPointF(16, 20), QPointF(23, 13)])),
+                           QPen(gray, 4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)),
+    }
 
 
 def apply_theme(app: QApplication):
@@ -3199,7 +3225,12 @@ def apply_theme(app: QApplication):
     ]:
         pal.setColor(role, QColor(col))
     app.setPalette(pal)
-    app.setStyleSheet(STYLE.replace("__CHECK__", _check_png()))
+    pngs = _ui_pngs()
+    style = (STYLE.replace("__CHECK__", pngs["check"])
+                  .replace("__PLUS__", pngs["spin_plus"])
+                  .replace("__MINUS__", pngs["spin_minus"])
+                  .replace("__ARROW__", pngs["combo_down"]))
+    app.setStyleSheet(style)
 
 
 def main(argv=None) -> int:
