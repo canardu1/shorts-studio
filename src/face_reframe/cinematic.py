@@ -32,7 +32,8 @@ class CinematicParams:
     engine the value is only an on/off switch — RNNoise has no depth knob."""
     denoise_engine: str = "rnn"
     """``rnn`` = arnndn (RNNoise GRU net) when the ffmpeg build and the model
-    support it, falling back to ``fft``; ``fft`` = afftdn spectral subtraction."""
+    support it, falling back to ``fft``; ``fft`` = afftdn spectral subtraction;
+    ``dfn`` = DeepFilterNet3 (external binary, best on non-stationary noise)."""
     highpass: float = 85.0
     """Rumble/handling-noise cut below this frequency (Hz)."""
     deess: float = 0.3
@@ -301,13 +302,17 @@ def _run_ffmpeg(cmd, total: float = 0.0,
 def measure_processed(path: str, start: float, duration: Optional[float],
                       p: CinematicParams, floor_db: float,
                       speech_db: Optional[float] = None,
-                      progress: Optional[Callable[[float], None]] = None) -> float:
-    """Integrated loudness (LUFS) the clip will have after the chain runs."""
+                      progress: Optional[Callable[[float], None]] = None,
+                      audio_src: Optional[str] = None) -> float:
+    """Integrated loudness (LUFS) the clip will have after the chain runs.
+
+    ``audio_src`` measures the chain on a different audio file (e.g. the
+    DeepFilterNet output) while ``path`` only marks the position."""
     chain = audio_chain(p, floor_db, speech_db)
     cmd = [find_ffmpeg(), "-v", "info"]
     if start > 0:
         cmd += ["-ss", "%.6f" % start]
-    cmd += ["-i", path, "-map", "a:0"]
+    cmd += ["-i", audio_src or path, "-map", "a:0"]
     if duration and duration > 0:
         cmd += ["-t", "%.6f" % duration]
     cmd += ["-af", "%sloudnorm=I=%.1f:print_format=json"
@@ -323,18 +328,22 @@ def bake_cinematic(path: str, out_path: str, p: CinematicParams,
                    floor_db: float, gain: float,
                    speech_db: Optional[float] = None,
                    progress: Optional[Callable[[float], None]] = None,
-                   duration: float = 0.0) -> str:
+                   duration: float = 0.0, audio_src: Optional[str] = None) -> str:
     """Write ``out_path``: video stream-copied, audio cleaned + sweetened.
 
     Mirrors :func:`face_reframe.loudness.bake_normalized` — the copy keeps
     the source's frame layout, so timeline source ranges carry over.
-    """
+    ``audio_src`` swaps the audio input (DeepFilterNet's cleaned WAV)."""
     chain = audio_chain(p, floor_db, speech_db)
     tail = "volume=%.2fdB,alimiter=limit=%.2f" % (gain, min(1.0, max(0.06, p.limiter)))
     chain = "%s,%s" % (chain, tail) if chain else tail
-    cmd = [find_ffmpeg(), "-y", "-v", "error", "-i", path,
-           "-map", "0:v:0?", "-map", "0:a?", "-c:v", "copy", "-af", chain,
-           "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out_path]
+    cmd = [find_ffmpeg(), "-y", "-v", "error", "-i", path]
+    if audio_src is not None:
+        cmd += ["-i", audio_src, "-map", "0:v:0?", "-map", "1:a:0"]
+    else:
+        cmd += ["-map", "0:v:0?", "-map", "0:a?"]
+    cmd += ["-c:v", "copy", "-af", chain,
+            "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out_path]
     _run_ffmpeg(cmd, duration or file_duration(path), progress)
     return out_path
 
@@ -348,10 +357,24 @@ def enhance(path: str, out_path: str, p: Optional[CinematicParams] = None,
     pcm = extract_audio(path, start, duration)
     floor = noise_floor_db(pcm)
     loud = speech_level_db(pcm)
-    measured = measure_processed(path, start, duration, p, floor, speech_db=loud,
-                                 progress=progress)
+    dfn_wav = None
+    # start>0 sections are left to the ffmpeg denoisers: the baked video is
+    # whole-file, a sectioned wav would go out of sync
+    if p.denoise_engine == "dfn" and p.denoise_db > 0 and start <= 0:
+        from .deepfilter import clean_to_wav
+        import dataclasses as _dc
+        dfn_wav = clean_to_wav(path, None, atten_db=min(100.0, p.denoise_db * 2.5),
+                               log=print, progress=progress,
+                               start=start, duration=duration)
+        if dfn_wav is not None:
+            # already denoised: the ffmpeg chain skips its own denoise stage
+            p = _dc.replace(p, denoise_db=0)
+    measure_src = dfn_wav or path
+    measured = measure_processed(measure_src, 0.0 if dfn_wav else start, duration,
+                                 p, floor, speech_db=loud, progress=progress)
     gain = gain_db(measured, target)
-    bake_cinematic(path, out_path, p, floor, gain, speech_db=loud, progress=progress)
+    bake_cinematic(path, out_path, p, floor, gain, speech_db=loud, progress=progress,
+                   audio_src=dfn_wav)
     return gain
 
 

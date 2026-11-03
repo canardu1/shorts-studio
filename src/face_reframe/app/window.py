@@ -305,6 +305,8 @@ class MainWindow(QMainWindow):
         self._proxy_retries = set()                # files already given one proxy rebuild
         self._skin = {}              # abs path -> measured SkinCorrection
         self._skin_view = None       # (key, correction at the current strength)
+        self._voice = {}             # abs path -> voice-tagged speech spans (ECAPA)
+        self._voice_on = False       # a voice-id job is running
         self._restorer = None        # preview face restorer (built in the background)
         self._restorer_key = None
         self._matter = None          # preview person matte for background blur
@@ -446,6 +448,7 @@ class MainWindow(QMainWindow):
         views.setHandleWidth(6)
         self.src_view = FrameView(tr("Select a video to preview"), draggable=True)
         self.src_view.crop_dragged.connect(self._crop_dragged)
+        self.src_view.object_picked.connect(self._object_picked)
         self.out_view = FrameView(tr("Vertical preview\n\nPress “Analyze faces”"))
         views.addWidget(self.src_view)
         views.addWidget(self.out_view)
@@ -593,7 +596,10 @@ class MainWindow(QMainWindow):
         # --- framing
         f = QFormLayout()
         W["aspect"] = seg(ASPECTS)
-        W["subject"] = seg([(tr("Main person"), "main"), (tr("Whoever speaks"), "speaker")])
+        W["subject"] = seg([(tr("Main person"), "main"), (tr("Whoever speaks"), "speaker"),
+                            (tr("Picked object"), "object")])
+        W["noface"] = seg([(tr("Keep centred"), "center"), (tr("Follow object (neural)"), "object")])
+        W["speaker_engine"] = seg([(tr("Mouth motion"), "mouth"), (tr("Voice ID (neural)"), "voice")])
         W["layout"] = combo([(tr("One person"), "single"), (tr("Split 2 people (top/bottom)"), "split")])
         W["smoothing"] = dspin(0, 3, 0.1, 0.5, 1, " s")
         W["dead_zone"] = dspin(0, 0.5, 0.01, 0.05)
@@ -612,6 +618,11 @@ class MainWindow(QMainWindow):
         W["stride"].setCurrentIndex(1)
         f.addRow(tr("Aspect"), W["aspect"])
         f.addRow(tr("Follow"), W["subject"])
+        self.pick_obj_btn = QPushButton(tr("Pick object on this frame…"))
+        self.pick_obj_btn.clicked.connect(self._pick_object)
+        f.addRow(self.pick_obj_btn)
+        f.addRow(tr("No face in shot"), W["noface"])
+        f.addRow(tr("Speaker engine"), W["speaker_engine"])
         f.addRow(tr("Layout"), W["layout"])
         f.addRow(tr("Smoothing"), W["smoothing"])
         f.addRow(tr("Dead zone"), W["dead_zone"])
@@ -627,7 +638,8 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Wide when face <"), W["wide_threshold"])
         f.addRow(tr("Max wide zoom"), W["max_zoom"])
         f.addRow(tr("Detection"), W["stride"])
-        f.addRow(hint(tr("Drag the yellow box in the preview to correct the crop from that point on. Below the preview, pick who to follow (select every thumbnail of the same person). “Whoever speaks” cuts to who is talking.")))
+        f.addRow(hint(tr("“Follow object” tracks the most salient thing in shots without faces — products, pets, B-roll — with the same U2-Net-p model used for thumbnail cut-outs (downloaded once, ~5 MB). "
+                         "Drag the yellow box in the preview to correct the crop from that point on. Below the preview, pick who to follow (select every thumbnail of the same person). “Whoever speaks” cuts to who is talking — Mouth motion judges by the lips, Voice ID (ECAPA, 84 MB once) listens to who is actually speaking and marks voice changes on the timeline.")))
         tabs.addTab(self._page(f), "Crop")
 
         # --- cuts
@@ -655,7 +667,8 @@ class MainWindow(QMainWindow):
         f = QFormLayout()
         W["cinematic"] = QCheckBox(tr("Cinematic audio"))
         W["denoise"] = dspin(0, 40, 1, 12, 0, " dB")
-        W["denoise_engine"] = seg([(tr("Neural (RNNoise)"), "rnn"), (tr("Spectral (FFT)"), "fft")])
+        W["denoise_engine"] = seg([(tr("RNNoise"), "rnn"), (tr("Spectral (FFT)"), "fft"),
+                                   (tr("DeepFilterNet"), "dfn")])
         W["dereverb"] = dspin(0, 30, 1, 12, 0, " dB")
         W["warmth"] = dspin(-6, 6, 0.1, 1.6, 1, " dB")
         W["presence"] = dspin(-6, 6, 0.1, 2.2, 1, " dB")
@@ -679,6 +692,7 @@ class MainWindow(QMainWindow):
         f.addRow(W["cinematic"])
         f.addRow(tr("Noise reduction"), W["denoise"])
         f.addRow(tr("Denoise engine"), W["denoise_engine"])
+        f.addRow(hint(tr("RNNoise is light and safe, Spectral adapts to the measured noise floor, DeepFilterNet (15 MB binary, downloaded once) is strongest on changing noise like traffic or crowds. The dB depth sets DeepFilterNet's attenuation limit.")))
         f.addRow(tr("De-reverb"), W["dereverb"])
         f.addRow(tr("Warmth"), W["warmth"])
         f.addRow(tr("Presence"), W["presence"])
@@ -688,6 +702,9 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Music volume"), W["music_db"])
         f.addRow(tr("Duck under voice"), W["duck"])
         f.addRow(hint(tr("The music loops for the whole duration and ducks by itself when someone talks.")))
+        W["audio_events"] = QCheckBox(tr("Sound events for the best moments"))
+        f.addRow(W["audio_events"])
+        f.addRow(hint(tr("YAMNet (16 MB, downloaded once) listens for laughter, applause and music: clips that have them score higher when you press “Find the best moments”.")))
         tabs.addTab(self._page(f), "Audio")
 
         # --- image
@@ -785,6 +802,12 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Strength"), W["look_strength"])
         f.addRow(W["auto_wb"])
         f.addRow(hint(tr("Auto balance evens out colour and exposure: handy to give shorts of the same series the same look.")))
+        W["lowlight"] = seg([(tr("Off"), "off"), (tr("Fast"), "sg_llie"), (tr("Quality"), "uretinex")])
+        W["lowlight_strength"] = dspin(0, 1, 0.05, 0.6)
+        f.addRow(section(tr("Low light (neural)")))
+        f.addRow(tr("Lift dark shots"), W["lowlight"])
+        f.addRow(tr("Strength"), W["lowlight_strength"])
+        f.addRow(hint(tr("Tiny enhancement nets that brighten underexposed shots: SG-LLIE (~17 ms/frame, good in motion) or URetinex-Net (~0.6 s/frame, cleaner). Models (0.05–1.6 MB) download on first export; the preview shows it on paused frames once downloaded.")))
         W["color_temp"] = dspin(-1, 1, 0.05, 0.0)
         W["color_tint"] = dspin(-1, 1, 0.05, 0.0)
         W["color_exp"] = dspin(-1, 1, 0.05, 0.0)
@@ -910,9 +933,14 @@ class MainWindow(QMainWindow):
         f.addRow(tr("File suffix"), self.suffix)
         W["encoder"] = combo([(tr("Auto (hardware on Mac)"), "auto"), ("Hardware (VideoToolbox)", "hardware"),
                               ("Software (x264)", "software")])
+        W["slowmo"] = seg([(tr("Off"), 1), ("2× slower", 2), ("4× slower", 4)])
+        W["slowmo_engine"] = seg([(tr("Neural (RIFE)"), "rife"), (tr("FFmpeg blend"), "ffmpeg")])
         W["cover"] = QCheckBox(tr("Also create the thumbnail (JPG)"))
         W["social"] = QCheckBox(tr("Create title, description and hashtags (.txt)"))
         f.addRow(tr("Encoder"), W["encoder"])
+        f.addRow(tr("Slow motion"), W["slowmo"])
+        f.addRow(tr("Interp engine"), W["slowmo_engine"])
+        f.addRow(hint(tr("RIFE invents the in-between frames (21 MB, once): real slow motion, export only. FFmpeg's blend is instant but smears fast action.")))
         f.addRow(W["cover"])
         f.addRow(W["social"])
         f.addRow(tr("Analysis cache"), crow)
@@ -1038,7 +1066,7 @@ class MainWindow(QMainWindow):
             aspect=v("aspect"), zoom=v("zoom"), follow_vertical=v("follow_vertical"),
             face_height_pos=v("face_pos"), stride=int(v("stride")),
             track=TrackSettings(smoothing=v("smoothing"), dead_zone=v("dead_zone"), max_speed=v("max_speed"),
-                                subject=v("subject"),
+                                subject=v("subject"), noface=v("noface"),
                                 look_room=v("look_room_amount") if v("look_room") else 0.0),
             shots=ShotSettings(wide_mode=v("wide_mode"), wide_threshold=v("wide_threshold"),
                                max_zoom=v("max_zoom")),
@@ -1061,6 +1089,7 @@ class MainWindow(QMainWindow):
             grade=Grade(temp=v("color_temp"), tint=v("color_tint"), exposure=v("color_exp"),
                         contrast=v("color_con"), saturation=v("color_sat"),
                         shadows=v("color_shad"), highlights=v("color_high"), vignette=v("color_vig")),
+            lowlight=v("lowlight"), lowlight_strength=v("lowlight_strength"),
             stabilize=v("stabilize"), stab_amount=v("stab_amount"), encoder=v("encoder"),
             bg_blur=v("bg_blur_amount") if v("bg_blur") else 0.0,
             restore=v("restore"), restore_blend=v("restore_blend"), restore_fidelity=v("restore_fidelity"),
@@ -1068,6 +1097,7 @@ class MainWindow(QMainWindow):
             cut_pauses=v("cut_pauses"),
             speech=SpeechParams(vad=v("speech_engine") != "db",
                                 min_pause=v("min_pause"), padding=v("padding"), margin_db=v("margin_db")),
+            speaker_engine=v("speaker_engine"),
             cut_breaths=v("cut_breaths"), cut_fillers=v("cut_fillers"), cut_retakes=v("cut_retakes"),
             cinematic=v("cinematic"),
             cinematic_params=CinematicParams(denoise_db=v("denoise"), denoise_engine=v("denoise_engine"),
@@ -1082,6 +1112,7 @@ class MainWindow(QMainWindow):
             motion=self.motion_settings(),
             manual_by_file={k: list(m) for k, m in self.manual.items() if m},
             preset=v("preset"), crf=int(v("crf")),
+            slowmo=int(v("slowmo")), slowmo_engine=v("slowmo_engine"),
             output_dir=self.out_dir.text().strip() or None,
             suffix=self.suffix.text() or "_short",
         )
@@ -1562,7 +1593,9 @@ class MainWindow(QMainWindow):
         o = self.reframe_options()
         key = os.path.abspath(self.current or "")
         return dataclasses.replace(o, track=dataclasses.replace(
-            o.track, person=self.person_pick.get(key) or None, manual=self.manual.get(key) or None))
+            o.track, person=self.person_pick.get(key) or None, manual=self.manual.get(key) or None,
+            voice=self._voice.get(key) if (o.track.subject == "speaker"
+                                           and self._val("speaker_engine") == "voice") else None))
 
     def _words(self):
         return self.cache.words(self.current, self._val("language")) if self.current else None
@@ -1598,10 +1631,16 @@ class MainWindow(QMainWindow):
             info = tr("Press “Analyze faces” to see the vertical crop.")
         else:
             from ..pipeline import plan_from_analysis
+            o = self.preview_options()
+            if (o.track.noface == "object" or o.track.subject == "object") \
+                    and not getattr(a, "salient_pass", False):
+                self._object_fill(a)
+            if o.track.subject == "speaker" and self._val("speaker_engine") == "voice" \
+                    and key not in self._voice:
+                self._voice_fill()
             self._fill_people(a)
             if s.skin:
                 self._measure_skin(a)
-            o = self.preview_options()
             self.result = plan_from_analysis(a, o)
             cuts = [x for x, _ in self.result.path.segments[1:]]
             shots = self.result.path.shots
@@ -1695,8 +1734,11 @@ class MainWindow(QMainWindow):
         if man:
             info += tr(" · %d manual corrections") % len(man)
         self.info_lab.setText(info)
+        vsegs = self._voice.get(key) or []
+        events = [vsegs[i][0] for i in range(1, len(vsegs))
+                  if vsegs[i][2] != vsegs[i - 1][2] and vsegs[i][2] >= 0]
         self.timeline.set_data(self.reader.count, fps, self.removed, cuts, [m[0] for m in man],
-                               self.clip_range, bool(words))
+                               self.clip_range, bool(words), events=events)
         self._show_frame(self.slider.value())
 
     def _preview_size(self):
@@ -1771,9 +1813,12 @@ class MainWindow(QMainWindow):
         if beauty is None and self._beautifier() is not None:
             # every skipped frame arms a settle; only the last one's survives
             QTimer.singleShot(150, self._beauty_settle)
+        lowlight = None if moving else self._lifter()
+        if lowlight is None and self._lifter() is not None:
+            QTimer.singleShot(150, self._beauty_settle)
         out = Framer(r, ow, oh, enh, self._punch, split_v, None, self._motion,
                      _seed(self.current), self._skin_now(), None if restore else beauty,
-                     getattr(self, "_look", None))(i, frame)
+                     getattr(self, "_look", None), lowlight=lowlight)(i, frame)
         if restore:
             # restoration runs on the frame before beauty (same order as the export)
             self._schedule_restore(i, out)
@@ -1804,6 +1849,128 @@ class MainWindow(QMainWindow):
                 self._replan()
 
         self._run(job, done, tr("Skin measure"))
+
+    def _lifter(self):
+        """Neural low-light lift for the preview — only when the model is
+        already downloaded (it fetches on first export otherwise)."""
+        key = self._val("lowlight")
+        if key == "off":
+            return None
+        from .. import lowlight
+        if not lowlight.available(key):
+            return None
+        k = (key, round(self._val("lowlight_strength"), 2))
+        if getattr(self, "_ll_key", None) != k:
+            try:
+                self._ll = lowlight.Lifter(key, k[1])
+            except Exception:
+                self._ll = None
+            self._ll_key = k
+        return self._ll
+
+    def _voice_fill(self):
+        """Tag speech spans by voice (ECAPA) for the current video — once,
+        in the background; then the speaker engine and the timeline marks."""
+        if self._voice_on or self._busy(tr("Voice identification")):
+            return
+        self._voice_on = True
+        path, key = self.current, os.path.abspath(self.current)
+        speech = SpeechParams(vad=self._val("speech_engine") != "db",
+                              min_pause=self._val("min_pause"), padding=self._val("padding"),
+                              margin_db=self._val("margin_db"))
+
+        def job(progress):
+            from ..silence import extract_audio, speech_intervals
+            from ..speakerid import analyze
+            pcm = self.pcm.get(key)
+            if pcm is None:
+                pcm = extract_audio(path)
+            return analyze(pcm, speech_intervals(pcm, speech), lambda *_: None, progress)
+
+        def done(vsegs):
+            self._voice_on = False
+            if vsegs:
+                self._voice[key] = vsegs
+                n = len({lab for _, _, lab in vsegs if lab >= 0})
+                self._log(tr("Voice ID: %d speaker%s") % (n, "s" if n != 1 else ""))
+            else:
+                self._voice[key] = []        # don't retry every replan
+            if path == self.current:
+                self._replan()
+
+        self._run(job, done, tr("Voice identification"),
+                  on_fail=lambda _e: setattr(self, "_voice_on", False))
+
+    def _pick_object(self):
+        """Arm the source view: the next drag draws the box NanoTrack follows."""
+        if not self.current or not self.reader:
+            return
+        if self.cache.get(self.current, self.reframe_options()) is None:
+            self._log(tr("Analyze faces first, then pick the object."))
+            return
+        self.src_view.pick_mode = True
+        self.src_view.setCursor(Qt.CrossCursor)
+        self._log(tr("Drag a box around the object to follow in the left preview"))
+
+    def _object_picked(self, x: float, y: float, w: float, h: float):
+        self.src_view.pick_mode = False
+        self.src_view.unsetCursor()
+        a = self.cache.get(self.current, self.reframe_options()) if self.current else None
+        if a is None:
+            return
+        k = getattr(self, "_view_k", 1.0) or 1.0
+        box = (x / k, y / k, max(8.0, w / k), max(8.0, h / k))
+        start = max(0, self.slider.value() - getattr(a, "start_frame", 0))
+        if self._busy(tr("Object tracking")):
+            return
+        path, analysis = self.current, a
+
+        def job(progress):
+            from ..objtrack import track
+            n = track(path, start, box, analysis.samples, self._log, progress)
+            analysis.salient_pass = True
+            return n
+
+        def done(n):
+            if n and self.current == path:
+                self._set("subject", "object")
+                self.cache.put(path, self.reframe_options(), analysis)
+                self._log(tr("Object locked: %d samples tracked") % n)
+                self._replan()
+            elif not n:
+                self._log(tr("Could not track the object (model missing or lost immediately)"))
+
+        self._run(job, done, tr("Object tracking"),
+                  on_fail=lambda _e: self._log(tr("Object tracking failed")))
+
+    def _object_fill(self, analysis):
+        """Backfill salient objects on a cached analysis (only faceless
+        frames are re-read), then replan — turning "Follow object" on after
+        the faces were analysed doesn't need a full re-analysis."""
+        if getattr(self, "_object_fill_on", False) or self._busy(tr("Object detection")):
+            return
+        if not any(not smp.faces for smp in analysis.samples):
+            analysis.salient_pass = True
+            return
+        self._object_fill_on = True
+        path, key = self.current, os.path.abspath(self.current)
+
+        def job(progress):
+            from ..saliency import LazySaliency, backfill
+            sal = LazySaliency(lambda *_: None, progress)
+            backfill(path, analysis, sal, progress)
+            return sal.ok
+
+        def done(ok):
+            self._object_fill_on = False
+            if ok and self.current:
+                self.cache.put(self.current, self.reframe_options(), analysis)
+                self._replan()
+            elif not ok:
+                self._log(tr("Object detection unavailable (offline): staying centred"))
+
+        self._run(job, done, tr("Object detection"),
+                on_fail=lambda _e: setattr(self, "_object_fill_on", False))
 
     def _skin_now(self):
         if not self._val("skin") or not self.current:
@@ -2165,8 +2332,12 @@ class MainWindow(QMainWindow):
 
         def job(progress):
             from ..detect import analyze_video
+            sal = None
+            if opts.track.noface == "object" or opts.track.subject == "object":
+                from ..saliency import LazySaliency
+                sal = LazySaliency(lambda *_: None, progress)
             return path, analyze_video(path, 0, None, stride=opts.stride, min_score=opts.min_score,
-                                       progress=progress)
+                                       progress=progress, saliency=sal)
 
         def done(res):
             p, a = res
@@ -2277,13 +2448,28 @@ class MainWindow(QMainWindow):
         self._transcribe(then=lambda: self._highlights_ready(src))
 
     def _highlights_ready(self, src):
-        from .highlights import find_highlights
         words = self.cache.words(src["path"], self._val("language"))
         if not words:
             self._log(tr("No transcript: can't look for the best moments"))
             return
+        if self._val("audio_events"):
+            self._log(tr("Listening for laughter and applause (YAMNet)…"))
+
+            def job(progress):
+                from ..silence import extract_audio
+                from ..audioevents import analyze
+                pcm = extract_audio(src["path"])
+                return analyze(pcm, lambda *_: None, progress)
+
+            self._run(job, lambda ev: self._finish_highlights(src, words, ev),
+                      tr("Audio events"), on_fail=lambda _e: self._finish_highlights(src, words, None))
+            return
+        self._finish_highlights(src, words, None)
+
+    def _finish_highlights(self, src, words, events):
+        from .highlights import find_highlights
         dur = self.reader.count / self.reader.fps if self.reader and self.current == src["path"] else words[-1].end
-        hls = find_highlights(words, dur, count=self.hl_count.value())
+        hls = find_highlights(words, dur, count=self.hl_count.value(), events=events)
         if not hls:
             self._log(tr("Video too short or no speech: no moments suggested"))
             return

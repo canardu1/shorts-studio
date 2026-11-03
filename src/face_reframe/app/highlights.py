@@ -41,8 +41,12 @@ def _ends_sentence(t: str) -> bool:
 
 def find_highlights(words: Sequence, duration: float, count: int = 5,
                     min_len: float = 30.0, max_len: float = 60.0,
-                    gap: float = 0.6) -> List[Highlight]:
-    """Top ``count`` non-overlapping clips, best first."""
+                    gap: float = 0.6, events=None) -> List[Highlight]:
+    """Top ``count`` non-overlapping clips, best first.
+
+    ``events`` is an :class:`audioevents.Events` (YAMNet) — laughter and
+    applause inside a clip raise its score, as an extra on top of the
+    transcript heuristics (they keep working without it)."""
     w = list(words)
     if len(w) < 10:
         return []
@@ -77,6 +81,8 @@ def find_highlights(words: Sequence, duration: float, count: int = 5,
                 + complete * 0.5 - fillers * 3.0
             # mild preference for ~45 s
             score -= abs(length - 0.5 * (min_len + max_len)) / max_len * 0.3
+            if events is not None:
+                score += events.boost(t0, t1)
             title = " ".join(x.text.strip() for x in seg[:8]).strip()
             cands.append(Highlight(t0, t1, score, title))
     cands.sort(key=lambda h: -h.score)

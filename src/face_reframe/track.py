@@ -22,8 +22,14 @@ class TrackSettings:
     """Median filter window in seconds used to reject detection glitches."""
     subject: str = "main"
     """Who to follow when several people are in a shot: ``main`` (the most
-    prominent face, locked for the whole shot) or ``speaker`` (whoever is
-    talking, judged from mouth movement; switches are hard cuts)."""
+    prominent face, locked for the whole shot), ``speaker`` (whoever is
+    talking, judged from mouth movement; switches are hard cuts) or
+    ``object`` (the salient/picked object wins over faces wherever the
+    samples carry one — the "track this thing" pick)."""
+    noface: str = "center"
+    """What the camera aims at in shots with no face: ``center`` holds the
+    frame centre, ``object`` follows the most salient blob (U2-Net-p boxes
+    stored on the analysis samples)."""
     speaker_hold: float = 1.2
     """Minimum seconds on one speaker before the camera may switch."""
     manual: Optional[List[Tuple[int, Optional[float], Optional[float]]]] = None
@@ -40,6 +46,11 @@ class TrackSettings:
     """Leave room toward the gaze: the crop target shifts up to this fraction
     of the crop width in the direction the face looks (from the nose-vs-eyes
     landmarks; 0 disables, ~0.15 gives a visible off-centre composition)."""
+    voice: Optional[List[Tuple[float, float, int]]] = None
+    """Voice-tagged speech spans ``(start_s, end_s, speaker_id)`` from
+    ECAPA-TDNN (:mod:`speakerid`): with ``subject="speaker"`` the camera
+    switches on actual voice changes; the mouth heuristic only maps each
+    voice to a face."""
 
 
 @dataclass
@@ -196,6 +207,19 @@ def _face_tracks(samples, frame_w: float, max_jump: float = 0.08, max_ratio: flo
     return tracks
 
 
+def _salient_track(samples) -> List[Tuple[int, Face]]:
+    """Pseudo face track out of the samples' salient-object boxes
+    (``FrameSample.salient``), so a faceless shot can follow the product /
+    pet / B-roll subject through the same smoothing pipeline."""
+    out = []
+    for smp in samples:
+        if smp.salient is None:
+            continue
+        cx, cy, w, h = smp.salient
+        out.append((smp.frame, Face(cx, cy, w, h, 1.0)))
+    return out
+
+
 def _main_track(samples, frame_w: float) -> List[Tuple[int, Face]]:
     """The one person to follow for a whole shot.
 
@@ -230,12 +254,15 @@ def _main_track(samples, frame_w: float) -> List[Tuple[int, Face]]:
 
 
 
-def _speaker_pieces(samples, frame_w: float, fps: float, hold_s: float):
+def _speaker_pieces(samples, frame_w: float, fps: float, hold_s: float,
+                    voice: Optional[List[Tuple[float, float, int]]] = None):
     """Split a shot by who is talking.
 
     Returns ``[(start_frame, end_frame, track)]`` covering the shot's
     samples, or ``None`` when there aren't two people with mouth data (then
-    the caller falls back to the main-subject lock).
+    the caller falls back to the main-subject lock). With ``voice``
+    (ECAPA speaker tags, seconds) the cuts happen where the voice changes
+    and mouth activity only decides which face owns that voice.
     """
     if len(samples) < 4:
         return None
@@ -244,6 +271,36 @@ def _speaker_pieces(samples, frame_w: float, fps: float, hold_s: float):
               and sum(1 for _, f in tr if f.mouth is not None) >= 0.5 * len(tr)]
     if len(tracks) < 2:
         return None
+    if voice:
+        # ECAPA: cut where the voice changes; the face is the track whose
+        # mouth moved most inside that voice's span
+        t0, t1 = samples[0].frame / fps, samples[-1].frame / fps
+        segs = [(max(a, t0), min(b, t1), lab) for a, b, lab in voice
+                if lab >= 0 and b > t0 and a < t1]
+        segs.sort()
+        if len({lab for _, _, lab in segs}) < 2:
+            return None
+        pieces, cur = [], None
+        for va, vb, lab in segs:
+            best, best_act = cur, 0.0
+            for tr in tracks:
+                act = sum(f.mouth or 0.0 for f, face in tr
+                          if va * fps <= f <= vb * fps)
+                if act > best_act:
+                    best, best_act = tr, act
+            if best is None:
+                continue
+            cur = best
+            fa, fb = int(round(va * fps)), int(round(vb * fps))
+            if pieces and pieces[-1][2] is cur:
+                pieces[-1] = (pieces[-1][0], fb, cur)
+            else:
+                pieces.append((fa, fb, cur))
+        if pieces:
+            # cover the pauses between speech: each piece lasts until the next
+            for k in range(len(pieces) - 1):
+                pieces[k] = (pieces[k][0], pieces[k + 1][0], pieces[k][2])
+        return pieces or None
     frames = np.array([smp.frame for smp in samples], float)
     act = np.zeros((len(tracks), len(samples)))
     for k, tr in enumerate(tracks):
@@ -431,9 +488,14 @@ def build_camera_path(
             pieces.append((a, b, max(here, key=lambda tr: float(np.mean(
                 [f.area * f.score for _, f in tr])) * len(tr))))
             continue
+        if s.subject == "object":
+            obj = _salient_track(seg_samples)
+            if obj:
+                pieces.append((a, b, obj))
+                continue
         split = None
         if s.subject == "speaker":
-            split = _speaker_pieces(seg_samples, w, fps, s.speaker_hold)
+            split = _speaker_pieces(seg_samples, w, fps, s.speaker_hold, s.voice)
         if not split:
             pieces.append((a, b, _main_track(seg_samples, w)))
             continue
@@ -445,6 +507,8 @@ def build_camera_path(
 
     last_face_center: Optional[Tuple[float, float, float]] = None
     for a, b, track in pieces:
+        if not track and s.noface == "object":
+            track = _salient_track([by_frame[f] for f in sorted(k for k in by_frame if a <= k < b)])
         frames, sx, sy, sh = [], [], [], []
         for f, face in track:
             frames.append(f - a)

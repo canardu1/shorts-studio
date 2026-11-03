@@ -34,7 +34,7 @@ face-reframe-app = "face_reframe.app.window:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-face_reframe = ["models/*.onnx"]
+face_reframe = ["models/*.onnx", "models/*.csv"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests"]

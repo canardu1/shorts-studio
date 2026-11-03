@@ -23,6 +23,13 @@ Shorts Studio / Face Reframe is licensed under GPL-3.0 (see `LICENSE`). It uses 
 | RVM `rvm_mobilenetv3_fp32.onnx` | person matte: background blur, thumbnail cut-outs | [PeterL1n/RobustVideoMatting](https://github.com/PeterL1n/RobustVideoMatting) | MIT |
 | BiSeNet `bisenet_resnet_34.onnx` | face parsing: precise skin mask for beauty | [zllrunning/face-parsing.PyTorch](https://github.com/zllrunning/face-parsing.PyTorch), ONNX via facefusion-assets | see source repo |
 | RNNoise `sh.rnnn` | neural audio denoise (FFmpeg `arnndn`) | [richardpl/arnndn-models](https://github.com/richardpl/arnndn-models); RNNoise is BSD-3-Clause | see source repo |
+| SG-LLIE `semantic_guided_llie_180x324.onnx` | low-light lift (fast) | [royshil/obs-backgroundremoval](https://github.com/royshil/obs-backgroundremoval) | MIT |
+| URetinex `uretinex_net_180x320.onnx` | low-light lift (quality) | royshil/obs-backgroundremoval | MIT |
+| YAMNet `yamnet.onnx` + class map | audio events (laughter, applause, music) | [zeropointnine/yamnet-onnx](https://huggingface.co/zeropointnine/yamnet-onnx); map via [tensorflow/models](https://github.com/tensorflow/models) | Apache-2.0 |
+| ECAPA-TDNN `ecapa-any-length.onnx` | voice embeddings for speaker follow | [kenrunio/transcriber-speaker-onnx](https://huggingface.co/kenrunio/transcriber-speaker-onnx) | Apache-2.0 |
+| RIFE 4.8 `rife48_ensemble_True_scale_1_sim.onnx` | frame interpolation (slow motion) | [yuvraj108c/rife-onnx](https://huggingface.co/yuvraj108c/rife-onnx); original [hzwer/Practical-RIFE](https://github.com/hzwer/Practical-RIFE) | MIT |
+| NanoTrackV2 `nanotrack_backbone/head_sim.onnx` | picked-object tracking (OpenCV TrackerNano) | [HonglinChu/SiamTrackers](https://github.com/HonglinChu/SiamTrackers) | Apache-2.0 |
+| DeepFilterNet `deep-filter` binary | neural audio denoise | [Rikorose/DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) | MIT |
 
 If you use Shorts Studio commercially, pick **GFPGAN** (or "off") for face restoration: the GPEN and CodeFormer weights may not be used for commercial purposes.
 

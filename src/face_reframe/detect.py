@@ -51,6 +51,10 @@ class FrameSample:
     frame: int
     faces: List[Face]
     cut: bool = False
+    salient: Optional[Tuple[float, float, float, float]] = None
+    """(cx, cy, w, h) of the most salient object when no face was found —
+    filled by ``analyze_video(saliency=...)`` (U2-Net-p) or by the object
+    tracker; used by the "follow the object" framing mode."""
 
 
 @dataclass
@@ -61,6 +65,10 @@ class Analysis:
     start_frame: int
     frame_count: int
     samples: List[FrameSample]
+    salient_pass: bool = False
+    """True when saliency was already offered on the faceless samples (by
+    ``analyze_video(saliency=...)`` or :func:`saliency.backfill`) — keeps a
+    cached analysis from being re-scanned for nothing."""
 
 
 class FaceDetector:
@@ -313,10 +321,14 @@ def analyze_video(
     cut_threshold: float = 0.45,
     min_score: float = 0.6,
     progress: Optional[Callable[[float], None]] = None,
+    saliency: Optional[Callable[[np.ndarray], Optional[Tuple[float, float, float, float]]]] = None,
 ) -> Analysis:
     """Detect faces on every ``stride``-th frame and flag hard cuts.
 
-    Frame numbers in the result are relative to ``start_frame``.
+    Frame numbers in the result are relative to ``start_frame``. When
+    ``saliency`` (e.g. :class:`saliency.Saliency`) is given, it is run on the
+    sampled frames that have no face and the blob is stored on the sample —
+    so the camera can follow products/pets/B-roll instead of the centre.
     """
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
@@ -354,7 +366,13 @@ def analyze_video(
                 for f in faces:
                     f.mouth = mouth_activity(f, gray, prev_gray, _same_face(f, prev_faces))
             prev_faces = faces
-            samples.append(FrameSample(i, faces, cut=pending_cut))
+            smp = FrameSample(i, faces, cut=pending_cut)
+            if not faces and saliency is not None:
+                try:
+                    smp.salient = saliency(frame)
+                except Exception:
+                    smp.salient = None
+            samples.append(smp)
             prev_gray = gray
             pending_cut = False
         if progress and frame_count < 10**9 and i % 25 == 0:
@@ -362,7 +380,9 @@ def analyze_video(
     cap.release()
     if progress:
         progress(1.0)
-    return Analysis(width, height, fps, start_frame, n, samples)
+    res = Analysis(width, height, fps, start_frame, n, samples)
+    res.salient_pass = saliency is not None and getattr(saliency, "ok", True)
+    return res
 
 
 def pick_subject(faces: Sequence[Face], previous: Optional[Face], frame_w: int) -> Optional[Face]:

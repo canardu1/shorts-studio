@@ -91,7 +91,8 @@ class Framer:
 
     def __init__(self, result: Result, out_w: int, out_h: int, enhancer=None,
                  punch: Optional[np.ndarray] = None, split: Optional[Split] = None,
-                 restorer=None, motion=None, seed: int = 0, skin=None, beauty=None, look=None):
+                 restorer=None, motion=None, seed: int = 0, skin=None, beauty=None, look=None,
+                 lowlight=None):
         self.r, self.out_w, self.out_h = result, out_w, out_h
         self.enhancer, self.punch, self.split = enhancer, punch, split
         self.restorer = restorer
@@ -99,6 +100,9 @@ class Framer:
         self.skin = skin
         self.beauty = beauty
         self.look = look
+        self.lowlight = lowlight
+        """:class:`lowlight.Lifter` neural exposure lift — before restoration
+        (lit faces restore better) and the colour grade."""
         """:class:`look.Look` (grade / auto white balance), after beauty."""
         """:class:`beauty.Beautifier`, after restoration (it refines skin the
         restorer rebuilt)."""
@@ -136,6 +140,8 @@ class Framer:
         if self.skin is not None:
             from ..skin import apply as skin_apply
             out = skin_apply(out, self.skin)
+        if self.lowlight is not None:
+            out = self.lowlight(out)
         if self.restorer is not None:
             out = self.restorer(out)
         if self.beauty is not None:

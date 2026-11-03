@@ -72,6 +72,9 @@ class JobSettings:
 
     cut_pauses: bool = False
     speech: SpeechParams = field(default_factory=SpeechParams)
+    speaker_engine: str = "mouth"
+    """``mouth`` = lip-motion heuristic; ``voice`` = ECAPA voice-prints —
+    the speaker engine used when reframe.track.subject == "speaker"."""
     cut_breaths: bool = False
     cut_fillers: bool = False
     cut_retakes: bool = False
@@ -109,6 +112,9 @@ class JobSettings:
     auto_wb: bool = False
     grade: object = None
     """:class:`look.Grade` manual grading (temperature, exposure, contrast…), or None."""
+    lowlight: str = "off"
+    """Neural low-light lift: ``off`` | ``sg_llie`` (fast) | ``uretinex``."""
+    lowlight_strength: float = 0.6
     stabilize: bool = False
     stab_amount: float = 0.8
     bg_blur: float = 0.0
@@ -117,6 +123,10 @@ class JobSettings:
     """``auto`` (hardware on a Mac when available), ``hardware`` or ``software``."""
     preset: str = "veryfast"
     crf: int = 18
+    slowmo: int = 1
+    """Slow-motion factor: 1 = off, 2/4 = interpolated slow motion."""
+    slowmo_engine: str = "rife"
+    """``rife`` = neural interpolation, ``ffmpeg`` = minterpolate blend."""
     output_dir: Optional[str] = None
     suffix: str = "_short"
 
@@ -638,7 +648,9 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         audio = has_audio(cur)
         if not audio:
             log(tr("  video has no audio: skipping cuts, captions, punch-in and cinematic audio"))
-        if audio and (s.cuts or s.needs_words or s.punch or (moves is not None and moves.needs_audio)):
+        wants_voice = s.reframe.track.subject == "speaker" and s.speaker_engine == "voice"
+        if audio and (s.cuts or s.needs_words or s.punch or wants_voice
+                      or (moves is not None and moves.needs_audio)):
             step(tr("Audio"))(0.0)
             pcm = extract_audio(cur)
             duration = len(pcm) / 16000.0
@@ -692,23 +704,44 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         from ..detect import analyze_video
         from ..pipeline import plan_from_analysis
         o = s.reframe
+        wants_object = o.track.noface == "object" or o.track.subject == "object"
         analysis = None
         if spans is None and cache is not None:
             full = cache.get(src, o)
             if full is not None:
+                if wants_object and not getattr(full, "salient_pass", False):
+                    from ..saliency import LazySaliency, backfill
+                    sal = LazySaliency(log, step(tr("Model download")))
+                    if any(not smp.faces for smp in full.samples):
+                        log(tr("Salient objects on faceless frames…"))
+                        backfill(src, full, sal, step(tr("Salient objects")))
+                        if sal.ok:
+                            cache.put(src, o, full)
+                    else:
+                        full.salient_pass = True
                 analysis = slice_analysis(full, offset_f, offset_f + int(round(duration * fps))) \
                     if clip is not None else full
                 log(tr("Faces: reusing the preview analysis"))
         if analysis is None:
             log(tr("Detecting faces…"))
+            sal_fn = None
+            if wants_object:
+                from ..saliency import LazySaliency
+                sal_fn = LazySaliency(log, step(tr("Model download")))
             analysis = analyze_video(cur, 0, None, stride=o.stride, min_score=o.min_score,
-                                     progress=step(tr("Faces")))
+                                     progress=step(tr("Faces")), saliency=sal_fn)
             if cache is not None and spans is None and clip is None:
                 cache.put(src, o, analysis)
 
         picks = s.person_by_file.get(src_abs) or None
         manual = _map_manual(s.manual_by_file.get(src_abs), offset_f, fps, spans)
-        track = dataclasses.replace(o.track, person=picks, manual=manual)
+        vsegs = None
+        if wants_voice and pcm is not None:
+            from ..silence import speech_intervals
+            from ..speakerid import analyze as voice_analyze
+            vsegs = voice_analyze(pcm, speech_intervals(pcm, s.speech), log,
+                                  step(tr("Voice identification")))
+        track = dataclasses.replace(o.track, person=picks, manual=manual, voice=vsegs)
         if picks:
             log(tr("Framing: follows the people picked in the preview"))
         if manual:
@@ -724,6 +757,12 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         if s.enhance.mode != "off":
             from ..enhance import Enhancer
             enhancer = Enhancer(s.enhance, log=log)
+        lifter = None
+        if s.lowlight != "off":
+            from ..lowlight import build as build_lowlight
+            lifter = build_lowlight(s.lowlight, s.lowlight_strength, log, step(tr("Model download")))
+            if lifter is not None:
+                log(tr("Low-light boost: %s, %.0f%%") % (s.lowlight, 100 * s.lowlight_strength))
         skin_fix = None
         if s.skin:
             from ..skin import measure_video
@@ -838,7 +877,7 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                                   c2.whip, c2.zblur, c2.glitch)
                 curves = c2
             framer = Framer(res, out_w, out_h, enhancer, punch, split, restorer, curves, _seed(src), skin_fix,
-                            beautifier, look_obj)
+                            beautifier, look_obj, lowlight=lifter)
             burner = None
             if events and s.subtitles == "burn":
                 # split screen: captions sit on the seam, off both faces
@@ -873,6 +912,19 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                 mixed = os.path.join(work, "music.mp4")
                 mix_music(tmp, s.music_path, mixed, s.music_db, s.duck_ratio, check)
                 tmp = mixed
+            if s.slowmo > 1:
+                from ..interp import ensure as rife_ensure, slowmo
+                if s.slowmo_engine == "rife" and not rife_ensure(step(tr("Model download")), log):
+                    s2 = dataclasses.replace(s, slowmo_engine="ffmpeg")
+                else:
+                    s2 = s
+                log(tr("Slow motion %d× (%s)…") % (s.slowmo, s2.slowmo_engine))
+                sl = os.path.join(work, "slow.mp4")
+                if slowmo(tmp, sl, s.slowmo, s2.slowmo_engine,
+                          progress=lambda f: step(tr("Slow motion"))(f), log=log):
+                    tmp = sl
+                else:
+                    log(tr("  slow motion failed: keeping normal speed"))
             shutil.move(tmp, out)
             done.append(out)
             if aspect == aspects[0] and s.cover:

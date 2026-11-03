@@ -25,14 +25,18 @@ class Timeline(QWidget):
         self.removed: List[Tuple[float, float]] = []
         self.cuts: Sequence[int] = ()
         self.manual: Sequence[int] = ()
+        self.events: Sequence[float] = ()
+        """Event times in seconds (voice changes, laughter…) — cyan dots."""
         self.clip: Optional[Tuple[int, int]] = None
         self.words = False
         self.pos = 0
 
-    def set_data(self, n: int, fps: float, removed=None, cuts=(), manual=(), clip=None, words=False):
+    def set_data(self, n: int, fps: float, removed=None, cuts=(), manual=(), clip=None,
+                 words=False, events=()):
         self.n, self.fps = max(1, n), fps or 25.0
         self.removed = list(removed or [])
         self.cuts, self.manual, self.clip, self.words = list(cuts), list(manual), clip, words
+        self.events = list(events)
         self.update()
 
     def set_pos(self, f: int):
@@ -68,6 +72,10 @@ class Timeline(QWidget):
         for m in self.manual:
             x = self._x(m)
             p.drawPolygon(QPolygonF([QPointF(x, 1), QPointF(x + 4, 5), QPointF(x, 9), QPointF(x - 4, 5)]))
+        p.setBrush(QColor("#5ac8fa"))
+        for t in self.events:
+            x = self._x(t * self.fps)
+            p.drawEllipse(QPointF(x, 25), 2.4, 2.4)
         x = self._x(self.pos)
         pen = QPen(QColor("#ffffff"), 2)
         pen.setCapStyle(Qt.RoundCap)

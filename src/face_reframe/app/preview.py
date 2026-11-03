@@ -69,10 +69,15 @@ class FrameView(QWidget):
     emitted on release, in image pixels."""
 
     crop_dragged = Signal(float, float)
+    object_picked = Signal(float, float, float, float)
+    """Emitted when a pick-mode drag ends: ``(x, y, w, h)`` in image pixels."""
 
     def __init__(self, placeholder: str = "", parent=None, draggable: bool = False):
         super().__init__(parent)
         self.draggable = draggable
+        self.pick_mode = False
+        self._pick_from: Optional[QPointF] = None
+        self._pick_rect: Optional[QRectF] = None
         self._scale = 1.0
         self._target = QRectF()
         self._drag_from: Optional[QPointF] = None
@@ -136,6 +141,10 @@ class FrameView(QWidget):
             fx, fy = self._face
             p.setPen(QPen(QColor("#4ade80"), 2))
             p.drawEllipse(target.x() + fx * s - 5, target.y() + fy * s - 5, 10, 10)
+        if self._pick_rect is not None:
+            p.setPen(QPen(QColor("#e5484d"), 2, Qt.DashLine))
+            p.setBrush(QColor(229, 72, 77, 40))
+            p.drawRect(self._pick_rect)
         if self._badge:
             p.setPen(Qt.NoPen)
             p.setBrush(QColor(0, 0, 0, 170))
@@ -158,19 +167,38 @@ class FrameView(QWidget):
         return QRectF(t.x() + x * s, t.y() + y * s, w * s, h * s).contains(pos)
 
     def mousePressEvent(self, ev):
+        if self.pick_mode and ev.button() == Qt.LeftButton and self._img is not None:
+            self._pick_from = ev.position()
+            self._pick_rect = None
+            self.update()
+            return
         if self.draggable and ev.button() == Qt.LeftButton and self._in_crop(ev.position()):
             self._drag_from = ev.position()
             self.setCursor(Qt.ClosedHandCursor)
 
     def mouseMoveEvent(self, ev):
-        if self._drag_from is not None:
+        if self._pick_from is not None:
+            self._pick_rect = QRectF(self._pick_from, ev.position()).normalized()
+            self.update()
+        elif self._drag_from is not None:
             d = ev.position() - self._drag_from
             self._drag_d = (d.x() / self._scale, d.y() / self._scale)
             self.update()
+        elif self.pick_mode:
+            self.setCursor(Qt.CrossCursor)
         elif self.draggable:
             self.setCursor(Qt.OpenHandCursor if self._in_crop(ev.position()) else Qt.ArrowCursor)
 
     def mouseReleaseEvent(self, ev):
+        if self._pick_from is not None:
+            r, t, s = self._pick_rect, self._target, self._scale
+            self._pick_from, self._pick_rect = None, None
+            self.update()
+            if r is not None and r.width() * r.height() > 4:
+                x = (r.x() - t.x()) / s
+                y = (r.y() - t.y()) / s
+                self.object_picked.emit(x, y, r.width() / s, r.height() / s)
+            return
         if self._drag_from is None:
             return
         dx, dy = self._drag_d

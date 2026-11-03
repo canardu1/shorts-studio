@@ -604,4 +604,62 @@ _IT = {
     "Denoise engine": "Motore denoise",
     "Neural (RNNoise)": "Neurale (RNNoise)",
     "Spectral (FFT)": "Spettrale (FFT)",
+    "DeepFilterNet": "DeepFilterNet",
+    "RNNoise is light and safe, Spectral adapts to the measured noise floor, DeepFilterNet (15 MB binary, downloaded once) is strongest on changing noise like traffic or crowds. The dB depth sets DeepFilterNet's attenuation limit.":
+        "RNNoise è leggero e sicuro, Spettrale si adatta al rumore misurato, DeepFilterNet (binario da 15 MB, scaricato una volta) è il più forte su rumori variabili come traffico e folla. I dB di profondità regolano l'attenuazione di DeepFilterNet.",
+    "DeepFilterNet unavailable on this platform: RNNoise/spectral stay":
+        "DeepFilterNet non disponibile su questa piattaforma: restano RNNoise/spettrale",
+    "DeepFilterNet failed (%s): RNNoise/spectral stay":
+        "DeepFilterNet fallito (%s): restano RNNoise/spettrale",
+    "DeepFilterNet: audio extraction failed": "DeepFilterNet: estrazione audio fallita",
+    "Downloading %s (%d MB, once)…": "Scarico %s (%d MB, solo la prima volta)…",
+    "Follow object (neural)": "Segui oggetto (neurale)",
+    "Keep centred": "Tieni centrato",
+    "No face in shot": "Senza volto in scena",
+    "Picked object": "Oggetto scelto",
+    "Pick object on this frame…": "Scegli l'oggetto su questo fotogramma…",
+    "Drag a box around the object to follow in the left preview":
+        "Trascina un riquadro attorno all'oggetto da seguire nell'anteprima a sinistra",
+    "Analyze faces first, then pick the object.":
+        "Prima analizza i volti, poi scegli l'oggetto.",
+    "Object tracking": "Tracciamento oggetto",
+    "Object detection": "Rilevamento oggetto",
+    "Object locked: %d samples tracked": "Oggetto agganciato: %d campioni tracciati",
+    "Could not track the object (model missing or lost immediately)":
+        "Impossibile tracciare l'oggetto (modello mancante o perso subito)",
+    "Object tracking failed": "Tracciamento oggetto fallito",
+    "Object detection unavailable (offline): staying centred":
+        "Rilevamento oggetto non disponibile (offline): resto centrato",
+    "Object tracking needs OpenCV with NanoTrack support":
+        "Il tracciamento oggetto richiede OpenCV con supporto NanoTrack",
+    "Speaker engine": "Motore parlato",
+    "Mouth motion": "Movimento labbra",
+    "Voice ID (neural)": "ID voce (neurale)",
+    "Voice identification": "Identificazione voce",
+    "Voice ID: %d speaker%s": "ID voce: %d parlante%s",
+    "Voices heard: %d speaker%s": "Voci rilevate: %d parlante%s",
+    "Voice identification unavailable (%s)": "Identificazione voce non disponibile (%s)",
+    "Audio events": "Eventi audio",
+    "Audio events unavailable (%s)": "Eventi audio non disponibili (%s)",
+    "Listening for laughter and applause (YAMNet)…": "Ascolto risate e applausi (YAMNet)…",
+    "Sound events for the best moments": "Eventi sonori per i momenti migliori",
+    "YAMNet (16 MB, downloaded once) listens for laughter, applause and music: clips that have them rank higher and appear on the timeline.":
+        "YAMNet (16 MB, scaricato una volta) riconosce risate, applausi e musica: le clip che li contengono salgono in classifica e appaiono sulla timeline.",
+    "Lift dark shots": "Schiarisci scene scure",
+    "Low light (neural)": "Poca luce (neurale)",
+    "Low-light boost unavailable (%s)": "Boost poca luce non disponibile (%s)",
+    "Tiny enhancement nets that brighten underexposed shots: SG-LLIE (~17 ms/frame, good in motion) and URetinex (~0.6 s/frame, heavier, nicer). Off in preview while playing, like the other neural filters.":
+        "Reti piccole che schiariscono le scene sottoesposte: SG-LLIE (~17 ms/fotogramma, ok in movimento) e URetinex (~0,6 s/fotogramma, più pesante e più curata). In anteprima si spengono in riproduzione, come gli altri filtri neurali.",
+    "Slow motion": "Rallenty",
+    "Interp engine": "Motore interpolazione",
+    "Neural (RIFE)": "Neurale (RIFE)",
+    "FFmpeg blend": "Fusione FFmpeg",
+    "RIFE invents the in-between frames (21 MB, once): real slow motion, export only. FFmpeg's blend is instant but smears fast action.":
+        "RIFE inventa i fotogrammi intermedi (21 MB, una volta): vero rallenty, solo in export. La fusione FFmpeg è immediata ma sbava l'azione veloce.",
+    "RIFE failed, using ffmpeg interpolation": "RIFE fallito, uso l'interpolazione ffmpeg",
+    "RIFE unavailable (%s)": "RIFE non disponibile (%s)",
+    "Slow-motion audio failed: %s": "Audio rallenty fallito: %s",
+    "Salient-object detection unavailable (%s)": "Rilevamento oggetto saliente non disponibile (%s)",
+    "“Follow object” tracks the most salient thing in shots without faces — products, pets, B-roll — with the same U2-Net-p model used for thumbnail cut-outs (downloaded once, ~5 MB). Drag the yellow box in the preview to correct the crop from that point on. Below the preview, pick who to follow (select every thumbnail of the same person). “Whoever speaks” cuts to who is talking — Mouth motion judges by the lips, Voice ID (ECAPA, 84 MB once) listens to who is actually speaking and marks voice changes on the timeline.":
+        "“Segui oggetto” insegue la cosa più saliente nelle scene senza volti — prodotti, animali, B-roll — con lo stesso modello U2-Net-p degli scontorni per copertina (scaricato una volta, ~5 MB). Trascina il riquadro giallo nell'anteprima per correggere il ritaglio da quel punto in poi. Sotto l'anteprima scegli chi seguire (seleziona tutte le miniature della stessa persona). “Chi parla” taglia su chi sta parlando — Movimento labbra giudica dalle labbra, ID voce (ECAPA, 84 MB una volta) ascolta chi parla davvero e segna i cambi voce sulla timeline.",
 }

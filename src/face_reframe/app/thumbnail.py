@@ -183,7 +183,23 @@ def pick_frames(path: str, analysis, count: int = 4, min_gap_s: float = 2.0,
         expr = 1.0 + 2.0 * max(0.0, _smile(f) - 0.72) + 0.6 * min(1.0, (f.mouth or 0.0) / 10.0)
         cands.append((f.area * f.score * (0.4 + frontal) * expr, smp.frame, f))
     if not cands:
-        return []
+        # No faces at all: aesthetic fallback — salient subject, sharp frame.
+        # Scores the U2-Net-p boxes the reframe can already produce; rule-of-
+        # thirds placement beats a perfectly centred blob.
+        for smp in analysis.samples:
+            if smp.salient is None:
+                continue
+            cx, cy, bw, bh = smp.salient
+            W_, H_ = analysis.width, analysis.height
+            area = bw * bh / float(W_ * H_)
+            if not 0.005 < area < 0.6:
+                continue
+            tx, ty = W_ / 3.0, H_ / 3.0
+            third = max(abs(cx - tx), abs(cx - 2 * tx)) + max(abs(cy - ty), abs(cy - 2 * ty))
+            third_score = 1.0 - min(1.0, third / (0.7 * (W_ + H_)))
+            cands.append((area * (0.5 + third_score) * W_ * H_, smp.frame, smp.salient))
+        if not cands:
+            return []
     cands.sort(key=lambda c: -c[0])
     # spread the reads over the video: best few per time bucket
     picked, seen = [], []
@@ -200,8 +216,17 @@ def pick_frames(path: str, analysis, count: int = 4, min_gap_s: float = 2.0,
         ok, img = cap.read()
         if not ok:
             continue
-        x0, y0 = int(max(0, f.cx - f.w / 2)), int(max(0, f.cy - f.h / 2))
-        crop = img[y0:int(y0 + f.h), x0:int(x0 + f.w)]
+        if isinstance(f, tuple):
+            # salient box (cx, cy, w, h) → Face-shaped shim for the pipeline
+            cx, cy, bw, bh = f
+            f = type("Obj", (), {"cx": cx, "cy": cy, "w": bw, "h": bh,
+                                 "area": bw * bh, "score": 1.0,
+                                 "landmarks": None, "mouth": 0.0})()
+        if f is None:
+            crop = img
+        else:
+            x0, y0 = int(max(0, f.cx - f.w / 2)), int(max(0, f.cy - f.h / 2))
+            crop = img[y0:int(y0 + f.h), x0:int(x0 + f.w)]
         if crop.size == 0:
             continue
         g = cv2.cvtColor(cv2.resize(crop, (128, 128)), cv2.COLOR_BGR2GRAY)
