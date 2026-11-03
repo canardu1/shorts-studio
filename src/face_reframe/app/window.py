@@ -189,6 +189,55 @@ def combo(items):
     return w
 
 
+class SegControl(QWidget):
+    """iOS-style segmented row for 2-4 mutually exclusive options: reads at a
+    glance where a combo box would hide the choices. Combo-like API
+    (``value`` / ``setValue`` / ``changed``) so it drops into the same
+    settings machinery."""
+
+    changed = Signal()
+
+    def __init__(self, items, parent=None):
+        super().__init__(parent)
+        self.setObjectName("segbox")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(2, 2, 2, 2)
+        lay.setSpacing(0)
+        self.group = QButtonGroup(self)
+        self.group.setExclusive(True)
+        self._btns = []
+        n = len(items)
+        for i, it in enumerate(items):
+            label, data = it if isinstance(it, tuple) else (it, it)
+            b = QPushButton(tr(label))
+            b.setCheckable(True)
+            b.setObjectName("segFirst" if i == 0 else "segLast" if i == n - 1 else "segMid")
+            b.setFlat(True)
+            lay.addWidget(b, 1)
+            self.group.addButton(b)
+            self._btns.append((b, data))
+        self._btns[0][0].setChecked(True)
+        self.group.buttonClicked.connect(lambda _b: self.changed.emit())
+
+    def value(self):
+        for b, d in self._btns:
+            if b.isChecked():
+                return d
+        return self._btns[0][1]
+
+    def setValue(self, v):
+        for i, (b, d) in enumerate(self._btns):
+            if d == v or str(d) == str(v):
+                b.setChecked(True)
+                return
+        self._btns[0][0].setChecked(True)
+
+
+def seg(items):
+    return SegControl(items)
+
+
 def hint(text):
     lab = QLabel(text)
     lab.setWordWrap(True)
@@ -289,7 +338,13 @@ class MainWindow(QMainWindow):
         vs.addWidget(self._build_bottom())
         vs.setStretchFactor(0, 1)
         vs.setSizes([740, 150])
-        self.setCentralWidget(vs)
+        central = QWidget()
+        vlay = QVBoxLayout(central)
+        vlay.setContentsMargins(0, 0, 0, 0)
+        vlay.setSpacing(0)
+        vlay.addWidget(self._build_header())
+        vlay.addWidget(vs, 1)
+        self.setCentralWidget(central)
 
         self._load_settings()
         self._sync_undo()
@@ -300,6 +355,8 @@ class MainWindow(QMainWindow):
                 sig = wd.valueChanged
             elif isinstance(wd, QComboBox):
                 sig = wd.currentIndexChanged
+            elif isinstance(wd, SegControl):
+                sig = wd.changed
             elif isinstance(wd, QCheckBox):
                 sig = wd.toggled
             if sig is not None:
@@ -308,6 +365,28 @@ class MainWindow(QMainWindow):
         self._refresh_cache_label()
 
     # ================================================================ layout
+    def _build_header(self):
+        bar = QFrame()
+        bar.setObjectName("header")
+        bar.setAttribute(Qt.WA_StyledBackground, True)
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(14, 0, 10, 0)
+        lay.setSpacing(0)
+        a = QLabel("SHORTS")
+        a.setObjectName("brand")
+        b = QLabel("STUDIO")
+        b.setObjectName("brandAlt")
+        lay.addWidget(a)
+        lay.addWidget(b)
+        lay.addStretch(1)
+        po = QPushButton(tr("Open project…"))
+        po.clicked.connect(self._open_project)
+        ps = QPushButton(tr("Save project…"))
+        ps.clicked.connect(self._save_project)
+        lay.addWidget(po)
+        lay.addWidget(ps)
+        return bar
+
     def _build_queue(self):
         box = QWidget()
         box.setObjectName("panel")
@@ -346,14 +425,6 @@ class MainWindow(QMainWindow):
         hl_row.addWidget(self.hl_btn, 1)
         hl_row.addWidget(self.hl_count)
         lay.addLayout(hl_row)
-        prow = QHBoxLayout()
-        po = QPushButton(tr("Open project…"))
-        po.clicked.connect(self._open_project)
-        ps = QPushButton(tr("Save project…"))
-        ps.clicked.connect(self._save_project)
-        prow.addWidget(po)
-        prow.addWidget(ps)
-        lay.addLayout(prow)
         srow = QHBoxLayout()
         soc = QPushButton(tr("Title, description & hashtags…"))
         soc.clicked.connect(self._show_social)
@@ -384,6 +455,12 @@ class MainWindow(QMainWindow):
         self.timeline = Timeline()
         self.timeline.seek.connect(self._seek)
         lay.addWidget(self.timeline)
+
+        card = QFrame()
+        card.setObjectName("ctlcard")
+        card_lay = QVBoxLayout(card)
+        card_lay.setContentsMargins(10, 7, 10, 8)
+        card_lay.setSpacing(7)
         ctl = QHBoxLayout()
         self.play_btn = QToolButton()
         self.play_btn.setIcon(_icon("play"))
@@ -414,7 +491,7 @@ class MainWindow(QMainWindow):
         ctl.addWidget(self.mute_btn)
         ctl.addWidget(self.ab_btn)
         ctl.addWidget(self.skip_cuts)
-        lay.addLayout(ctl)
+        card_lay.addLayout(ctl)
 
         row = QHBoxLayout()
         self.analyze_btn = QPushButton(tr("Analyze faces"))
@@ -459,7 +536,8 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence.Undo, self, self._shortcut_undo)
         QShortcut(QKeySequence.Redo, self, self._shortcut_redo)
         QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self._shortcut_redo)
-        lay.addLayout(row)
+        card_lay.addLayout(row)
+        lay.addWidget(card)
         self.info_lab = hint("")
         lay.addWidget(self.info_lab)
 
@@ -500,15 +578,22 @@ class MainWindow(QMainWindow):
         cl.addLayout(prow)
 
         tabs = QTabWidget()
-        tabs.setMinimumWidth(380)
+        tabs.setMinimumWidth(330)
         tabs.tabBar().setExpanding(False)
-        cl.addWidget(tabs, 1)
+        tabs.tabBar().hide()
+        self.tabs = tabs
+        srow2 = QHBoxLayout()
+        srow2.setContentsMargins(0, 0, 0, 0)
+        srow2.setSpacing(0)
+        srow2.addWidget(self._build_rail(tabs))
+        srow2.addWidget(tabs, 1)
+        cl.addLayout(srow2, 1)
         W = self.w
 
         # --- framing
         f = QFormLayout()
-        W["aspect"] = combo(ASPECTS)
-        W["subject"] = combo([(tr("Main person"), "main"), (tr("Whoever speaks"), "speaker")])
+        W["aspect"] = seg(ASPECTS)
+        W["subject"] = seg([(tr("Main person"), "main"), (tr("Whoever speaks"), "speaker")])
         W["layout"] = combo([(tr("One person"), "single"), (tr("Split 2 people (top/bottom)"), "split")])
         W["smoothing"] = dspin(0, 3, 0.1, 0.5, 1, " s")
         W["dead_zone"] = dspin(0, 0.5, 0.01, 0.05)
@@ -520,7 +605,7 @@ class MainWindow(QMainWindow):
         W["look_room_amount"] = dspin(0.05, 0.4, 0.05, 0.15)
         W["punch"] = QCheckBox(tr("Auto punch-in on phrases"))
         W["punch_zoom"] = dspin(1.02, 1.5, 0.01, 1.15, 2, "×")
-        W["wide_mode"] = combo([(tr("Zoom on subject"), "zoom"), (tr("Full height"), "keep")])
+        W["wide_mode"] = seg([(tr("Zoom on subject"), "zoom"), (tr("Full height"), "keep")])
         W["wide_threshold"] = dspin(0.02, 0.5, 0.01, 0.12)
         W["max_zoom"] = dspin(1, 4, 0.1, 2.0, 1, "×")
         W["stride"] = combo([(tr("Every frame (slow)"), 1), (tr("Every 2 frames"), 2), (tr("Every 3 frames (fast)"), 3)])
@@ -548,7 +633,7 @@ class MainWindow(QMainWindow):
         # --- cuts
         f = QFormLayout()
         W["cut_pauses"] = QCheckBox(tr("Cut pauses"))
-        W["speech_engine"] = combo([(tr("Neural (Silero VAD)"), "vad"), (tr("Levels (dB)"), "db")])
+        W["speech_engine"] = seg([(tr("Neural (Silero VAD)"), "vad"), (tr("Levels (dB)"), "db")])
         W["min_pause"] = dspin(0.1, 3, 0.05, 0.35, 2, " s")
         W["padding"] = dspin(0, 0.5, 0.01, 0.16, 2, " s")
         W["margin_db"] = dspin(3, 20, 0.5, 8.0, 1, " dB")
@@ -570,7 +655,7 @@ class MainWindow(QMainWindow):
         f = QFormLayout()
         W["cinematic"] = QCheckBox(tr("Cinematic audio"))
         W["denoise"] = dspin(0, 40, 1, 12, 0, " dB")
-        W["denoise_engine"] = combo([(tr("Neural (RNNoise)"), "rnn"), (tr("Spectral (FFT)"), "fft")])
+        W["denoise_engine"] = seg([(tr("Neural (RNNoise)"), "rnn"), (tr("Spectral (FFT)"), "fft")])
         W["dereverb"] = dspin(0, 30, 1, 12, 0, " dB")
         W["warmth"] = dspin(-6, 6, 0.1, 1.6, 1, " dB")
         W["presence"] = dspin(-6, 6, 0.1, 2.2, 1, " dB")
@@ -679,8 +764,8 @@ class MainWindow(QMainWindow):
         W["mv_shake"] = QCheckBox(tr("Shake on voice peaks"))
         W["mv_shake_amount"] = dspin(0, 1, 0.05, 0.5)
         W["mv_transition"] = combo(TRANSITIONS)
-        W["mv_every"] = combo([(tr("Every cut"), "all"), (tr("Every other one"), "alternate"),
-                               (tr("Only shot changes"), "shots")])
+        W["mv_every"] = seg([(tr("Every cut"), "all"), (tr("Every other one"), "alternate"),
+                             (tr("Only shot changes"), "shots")])
         W["mv_gap"] = dspin(0.5, 10, 0.5, 1.5, 1, " s")
         f.addRow(section(tr("Camera moves")))
         f.addRow(W["mv_handheld"])
@@ -701,7 +786,7 @@ class MainWindow(QMainWindow):
         # --- subtitles
         f = QFormLayout()
         W["subtitles"] = combo(SUBS)
-        W["caption_style"] = combo([(tr("Word by word"), "word"), (tr("Whole line"), "line")])
+        W["caption_style"] = seg([(tr("Word by word"), "word"), (tr("Whole line"), "line")])
         W["language"] = combo(LANGS)
         W["caption_words"] = ispin(1, 8, 3)
         W["caption_max_dur"] = dspin(0.5, 5, 0.1, 1.6, 1, " s")
@@ -768,7 +853,7 @@ class MainWindow(QMainWindow):
 
         # --- export
         f = QFormLayout()
-        W["resolution"] = combo(RES)
+        W["resolution"] = seg(RES)
         W["preset"] = combo(X264)
         W["crf"] = ispin(14, 30, 18)
         W["fmt_45"] = QCheckBox(tr("4:5 (Instagram feed)"))
@@ -815,6 +900,37 @@ class MainWindow(QMainWindow):
         f.addRow(hint(tr("Restart the app to apply the new language.")))
         tabs.addTab(self._page(f), "Export")
         return col
+
+    RAIL = [("crop", "Crop"), ("cut", "Cuts"), ("audio", "Audio"), ("quality", "Quality"),
+            ("effects", "Effects"), ("texts", "Texts"), ("export", "Export")]
+
+    def _build_rail(self, tabs):
+        w = QWidget()
+        w.setObjectName("rail")
+        w.setAttribute(Qt.WA_StyledBackground, True)
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(4, 10, 4, 10)
+        lay.setSpacing(3)
+        self._rail_btns = []
+        for i, (icon, name) in enumerate(self.RAIL):
+            b = QToolButton()
+            b.setCheckable(True)
+            b.setObjectName("railBtn")
+            b.setIcon(_rail_icon(icon))
+            b.setIconSize(QSize(19, 19))
+            b.setText(tr(name))
+            b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            b.clicked.connect(lambda _c, i=i: tabs.setCurrentIndex(i))
+            lay.addWidget(b)
+            self._rail_btns.append(b)
+        lay.addStretch(1)
+        tabs.currentChanged.connect(self._rail_sync)
+        self._rail_sync(tabs.currentIndex())
+        return w
+
+    def _rail_sync(self, i):
+        for j, b in enumerate(self._rail_btns):
+            b.setChecked(j == i)
 
     def _page(self, form: QFormLayout):
         page = QWidget()
@@ -866,6 +982,8 @@ class MainWindow(QMainWindow):
             return wd.value()
         if isinstance(wd, QComboBox):
             return wd.currentData()
+        if isinstance(wd, SegControl):
+            return wd.value()
         if isinstance(wd, QCheckBox):
             return wd.isChecked()
         return None
@@ -884,6 +1002,8 @@ class MainWindow(QMainWindow):
                 i = wd.findText(str(value))
             if i >= 0:
                 wd.setCurrentIndex(i)
+        elif isinstance(wd, SegControl):
+            wd.setValue(value)
         elif isinstance(wd, QCheckBox):
             wd.setChecked(bool(value))
 
@@ -1173,6 +1293,7 @@ class MainWindow(QMainWindow):
 
     def _add_item(self, data: dict, row: Optional[int] = None):
         it = QListWidgetItem("○  " + data["label"])
+        it.setIcon(_icon("film"))
         it.setData(Qt.UserRole, data)
         it.setToolTip(data["path"])
         if row is None:
@@ -2796,8 +2917,12 @@ class MainWindow(QMainWindow):
 STYLE = """
 /* ---------- base ---------- */
 QWidget { font-size: 13px; color: #e6e9ee; }
+QFrame#header { background: #0b0d10; border-bottom: 1px solid #1e2229; }
+QLabel#brand { font-size: 13px; font-weight: 800; color: #e6e9ee; }
+QLabel#brandAlt { font-size: 13px; font-weight: 800; color: #e5484d; }
 QWidget#panel { background: #15181e; }
 QWidget#previewPane { background: #0e1014; }
+QFrame#ctlcard { background: #13161c; border: 1px solid #21252d; border-radius: 10px; }
 QLabel#h1 { font-size: 12px; font-weight: 700; color: #8f98a9; }
 QLabel#hint { color: #7d8695; font-size: 12px; }
 QLabel#status { color: #aab2c0; font-weight: 600; }
@@ -2829,6 +2954,13 @@ QToolButton:pressed, QToolButton:checked { background: #2a2f39; border-color: #3
 QToolButton#person { background: #181b21; border: 2px solid #2c313c; border-radius: 8px; color: #cbd2dc; }
 QToolButton#person:hover { border-color: #4a5260; }
 QToolButton#person:checked { border: 2px solid #e5484d; background: #32202a; }
+QWidget#rail { background: #0f1116; }
+QToolButton#railBtn {
+    border-radius: 8px; padding: 9px 2px 7px; margin: 0 2px;
+    font-size: 10px; color: #7d8695;
+}
+QToolButton#railBtn:hover { background: #1a1e26; color: #b9c0cd; }
+QToolButton#railBtn:checked { background: #332025; color: #f0a7ab; }
 
 /* ---------- inputs ---------- */
 QLineEdit, QComboBox, QAbstractSpinBox {
@@ -2849,6 +2981,24 @@ QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
     width: 18px; border-left: 1px solid #232833; background: transparent;
 }
 QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover { background: #242933; }
+
+/* ---------- segmented ---------- */
+QWidget#segbox { background: #16191f; border: 1px solid #262b34; border-radius: 8px; }
+QPushButton#segFirst, QPushButton#segMid, QPushButton#segLast {
+    border: none; border-radius: 0; background: transparent;
+    padding: 5px 6px; color: #9aa3b2; font-size: 12px;
+}
+QPushButton#segFirst { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+QPushButton#segLast { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+QPushButton#segFirst:hover, QPushButton#segMid:hover, QPushButton#segLast:hover {
+    color: #d4d9e2; background: #1f242d;
+}
+QPushButton#segFirst:checked, QPushButton#segMid:checked, QPushButton#segLast:checked {
+    background: #3a4150; color: #ffffff;
+}
+QPushButton#segFirst:disabled, QPushButton#segMid:disabled, QPushButton#segLast:disabled {
+    color: #565d69; background: transparent;
+}
 
 /* ---------- lists ---------- */
 QListWidget {
@@ -2918,15 +3068,16 @@ QMenu::separator { height: 1px; background: #242933; margin: 4px 8px; }
 """
 
 
-def _icon(kind: str) -> QIcon:
-    """Small transport icons painted at runtime (no asset files, same look
-    on every platform)."""
+def _pixmap(kind: str, color: str) -> QPixmap:
+    """Small geometric icons painted at runtime (no asset files, same look
+    on every platform), on a 32-px logical canvas."""
     img = QImage(64, 64, QImage.Format_ARGB32)
     img.setDevicePixelRatio(2.0)
     img.fill(Qt.transparent)
     pt = QPainter(img)
     pt.setRenderHint(QPainter.Antialiasing)
-    c = QColor("#c4cad4")
+    c = QColor(color)
+    line = QPen(c, 2.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
     if kind == "play":
         pt.setPen(Qt.NoPen)
         pt.setBrush(c)
@@ -2936,7 +3087,7 @@ def _icon(kind: str) -> QIcon:
         pt.setBrush(c)
         pt.drawRoundedRect(QRectF(8.5, 7, 5.5, 18), 1.8, 1.8)
         pt.drawRoundedRect(QRectF(18, 7, 5.5, 18), 1.8, 1.8)
-    else:
+    elif kind in ("vol", "vol_off"):
         pt.setPen(Qt.NoPen)
         pt.setBrush(c)
         pt.drawPolygon(QPolygonF([QPointF(6, 12), QPointF(11, 12), QPointF(17, 6),
@@ -2949,8 +3100,71 @@ def _icon(kind: str) -> QIcon:
         else:
             pt.drawLine(QPointF(21, 12), QPointF(28, 20))
             pt.drawLine(QPointF(28, 12), QPointF(21, 20))
+    elif kind == "crop":
+        pt.setPen(line)
+        for pts in ([(9, 13), (9, 9), (13, 9)], [(19, 9), (23, 9), (23, 13)],
+                    [(23, 19), (23, 23), (19, 23)], [(13, 23), (9, 23), (9, 19)]):
+            pt.drawPolyline(QPolygonF([QPointF(x, y) for x, y in pts]))
+    elif kind == "cut":
+        pt.setPen(QPen(c, 2.0, Qt.SolidLine, Qt.RoundCap))
+        pt.setBrush(Qt.NoBrush)
+        pt.drawEllipse(QPointF(10.5, 22), 3, 3)
+        pt.drawEllipse(QPointF(21.5, 22), 3, 3)
+        pt.setPen(line)
+        pt.drawLine(QPointF(12.5, 19.5), QPointF(21, 8))
+        pt.drawLine(QPointF(19.5, 19.5), QPointF(11, 8))
+    elif kind == "audio":
+        pt.setPen(QPen(c, 2.8, Qt.SolidLine, Qt.RoundCap))
+        for x, hh in ((7, 7), (12, 14), (17, 22), (22, 14), (27, 9)):
+            pt.drawLine(QPointF(x, 16 - hh / 2), QPointF(x, 16 + hh / 2))
+    elif kind == "quality":
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        pt.drawPolygon(QPolygonF([QPointF(16, 6), QPointF(18.4, 13.6), QPointF(26, 16),
+                                  QPointF(18.4, 18.4), QPointF(16, 26), QPointF(13.6, 18.4),
+                                  QPointF(6, 16), QPointF(13.6, 13.6)]))
+        pt.drawEllipse(QPointF(24, 8), 1.6, 1.6)
+    elif kind == "effects":
+        pt.setPen(QPen(c, 3.0, Qt.SolidLine, Qt.RoundCap))
+        pt.drawLine(QPointF(9, 23), QPointF(22, 10))
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        pt.drawEllipse(QPointF(20, 20), 1.6, 1.6)
+        pt.drawEllipse(QPointF(10, 9), 1.6, 1.6)
+        pt.drawEllipse(QPointF(24, 16), 1.3, 1.3)
+    elif kind == "texts":
+        pt.setPen(QPen(c, 2.6, Qt.SolidLine, Qt.RoundCap))
+        for y, x2 in ((10, 24), (16, 20), (22, 15)):
+            pt.drawLine(QPointF(8, y), QPointF(x2, y))
+    elif kind == "export":
+        pt.setPen(line)
+        pt.setBrush(Qt.NoBrush)
+        pt.drawRoundedRect(QRectF(7, 15, 18, 10), 2.5, 2.5)
+        pt.drawLine(QPointF(16, 6), QPointF(16, 17))
+        pt.drawPolyline(QPolygonF([QPointF(11.5, 10.5), QPointF(16, 6), QPointF(20.5, 10.5)]))
+    elif kind == "film":
+        pt.setPen(QPen(c, 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        pt.setBrush(Qt.NoBrush)
+        pt.drawRoundedRect(QRectF(6, 9, 20, 14), 2.5, 2.5)
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        for y in (11, 18):
+            pt.drawRect(QRectF(8, y, 3, 3))
+            pt.drawRect(QRectF(21, y, 3, 3))
     pt.end()
-    return QIcon(QPixmap.fromImage(img))
+    return QPixmap.fromImage(img)
+
+
+def _icon(kind: str) -> QIcon:
+    return QIcon(_pixmap(kind, "#c4cad4"))
+
+
+def _rail_icon(kind: str) -> QIcon:
+    """Two-state icon: muted normally, accent when the rail tab is active."""
+    ic = QIcon()
+    ic.addPixmap(_pixmap(kind, "#8f98a9"), QIcon.Normal, QIcon.Off)
+    ic.addPixmap(_pixmap(kind, "#e58a8e"), QIcon.Normal, QIcon.On)
+    return ic
 
 
 def _check_png() -> str:

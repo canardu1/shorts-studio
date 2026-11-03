@@ -143,6 +143,9 @@ _IT = {
         "compaiono dopo “Trascrivi”. Whisper gira una volta per video e il "
         "risultato resta in cache.",
     "Cuts": "Tagli",
+    "Crop": "Ritaglio",
+    "Audio": "Audio",
+    "Export": "Esporta",
 
     # ---- audio tab
     "Cinematic audio": "Audio cinematico",
