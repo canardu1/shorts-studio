@@ -1137,6 +1137,8 @@ class MainWindow(QMainWindow):
                         i = wd.findText(str(val))
                     if i >= 0:
                         wd.setCurrentIndex(i)
+                elif isinstance(wd, SegControl):
+                    wd.setValue(val)
                 elif isinstance(wd, QCheckBox):
                     wd.setChecked(str(val).lower() in ("true", "1"))
             except (TypeError, ValueError):
@@ -1159,6 +1161,8 @@ class MainWindow(QMainWindow):
                 st.setValue("opt/" + name, wd.value())
             elif isinstance(wd, QComboBox):
                 st.setValue("opt/" + name, wd.currentData())
+            elif isinstance(wd, SegControl):
+                st.setValue("opt/" + name, wd.value())
             elif isinstance(wd, QCheckBox):
                 st.setValue("opt/" + name, wd.isChecked())
         st.setValue("out_dir", self.out_dir.text())
