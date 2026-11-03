@@ -51,7 +51,8 @@ def _run(cap, grid_set, f0: int, f1: int, step: int, first_box,
     ok, frame = cap.read()
     if not ok:
         return out
-    tr.init(frame, first_box)
+    # TrackerNano wants an int (x, y, w, h) rect — floats fail the binding
+    tr.init(frame, tuple(int(round(v)) for v in first_box))
     if f0 in grid_set:
         out[f0] = first_box
     f = f0
