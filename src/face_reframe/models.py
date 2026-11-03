@@ -53,6 +53,10 @@ MODELS: Dict[str, Model] = {
     "rife": Model("rife", "rife48_ensemble_True_scale_1_sim.onnx",
                   _HF + "/yuvraj108c/rife-onnx/resolve/main/rife48_ensemble_True_scale_1_sim.onnx",
                   15_000_000, 21, "RIFE 4.8 (slow motion)"),
+    # photographic portrait matting — much finer edges than RVM-MobileNet
+    "modnet": Model("modnet", "modnet.onnx",
+                    "https://github.com/facefusion/facefusion-assets/releases/download/models-3.5.0/modnet.onnx",
+                    20_000_000, 24, "MODNet (portrait matting)"),
     # generic object tracking (OpenCV TrackerNano wants two files)
     "nanotrack_backbone": Model("nanotrack_backbone", "nanotrack_backbone_sim.onnx",
                                 _GH_RAW + "/HonglinChu/SiamTrackers/master/NanoTrack/models/nanotrackv2/nanotrack_backbone_sim.onnx",

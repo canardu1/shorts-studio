@@ -118,6 +118,9 @@ class JobSettings:
     stabilize: bool = False
     stab_amount: float = 0.8
     bg_blur: float = 0.0
+    bg_engine: str = "rvm"
+    """Matting engine for the background blur: ``rvm`` (fast, recurrent) or
+    ``modnet`` (finer hair/edges, per-frame)."""
     """Blur strength behind the person (RVM matte); 0 = off."""
     encoder: str = "auto"
     """``auto`` (hardware on a Mac when available), ``hardware`` or ``software``."""
@@ -887,7 +890,7 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
             hooks = []
             if s.bg_blur > 0:
                 from .rvm import build as build_bg_blur
-                bg = build_bg_blur(s.bg_blur, step(tr("Background blur")), log)
+                bg = build_bg_blur(s.bg_blur, s.bg_engine, step(tr("Background blur")), log)
                 if bg is not None:
                     hooks.append(bg)          # blur first: don't soften captions/overlays
             if burner is not None:

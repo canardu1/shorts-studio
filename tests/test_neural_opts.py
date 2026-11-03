@@ -99,3 +99,18 @@ def test_saliency_feeds_float32(monkeypatch):
     s = saliency.Saliency()
     s.map(np.zeros((90, 160, 3), np.uint8))
     assert fed["x"].dtype == np.float32
+
+
+def test_refine_matte_snaps_edges():
+    """The guided filter keeps the interior and snaps a coarse matte to the
+    frame's real luminance edges (the 'scontorno' fix)."""
+    import cv2
+    from face_reframe.app.rvm import refine_matte
+    img = np.random.default_rng(0).integers(0, 60, (360, 480, 3), np.uint8)
+    cv2.ellipse(img, (240, 180), (90, 130), 0, 0, 360, (200, 210, 230), -1)
+    coarse = np.zeros((90, 120), np.float32)
+    cv2.ellipse(coarse, (60, 45), (24, 34), 0, 0, 360, 1.0, -1)
+    coarse = cv2.resize(coarse, (480, 360), interpolation=cv2.INTER_LINEAR)
+    r = refine_matte(img, coarse, contract=0, feather=0.5)
+    assert r[150:210, 220:260].mean() > 0.85
+    assert r[30:60, 30:80].mean() < 0.2

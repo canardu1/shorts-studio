@@ -751,8 +751,11 @@ class MainWindow(QMainWindow):
         f.addRow(section(tr("Background")))
         W["bg_blur"] = QCheckBox(tr("Blur background"))
         W["bg_blur_amount"] = dspin(0.1, 1.5, 0.05, 0.6)
+        W["bg_engine"] = seg([(tr("Fast (RVM)"), "rvm"), (tr("Quality (MODNet)"), "modnet")])
         f.addRow(W["bg_blur"])
         f.addRow(tr("Strength"), W["bg_blur_amount"])
+        f.addRow(tr("Matte engine"), W["bg_engine"])
+        f.addRow(hint(tr("MODNet (24 MB once) cuts much finer edges — hair, glasses, hands. The preview always shows the fast engine; the export uses the one you pick. Edges are snapped to real pixels either way.")))
         f.addRow(hint(tr("Neural person matte (RVM): keeps the subject sharp and blurs everything else, like a portrait lens. The 14 MB model downloads on first export.")))
         f.addRow(section(tr("Sharpness & upscale")))
         f.addRow(tr("Enhancement"), W["enhance"])
@@ -1092,6 +1095,7 @@ class MainWindow(QMainWindow):
             lowlight=v("lowlight"), lowlight_strength=v("lowlight_strength"),
             stabilize=v("stabilize"), stab_amount=v("stab_amount"), encoder=v("encoder"),
             bg_blur=v("bg_blur_amount") if v("bg_blur") else 0.0,
+            bg_engine=v("bg_engine"),
             restore=v("restore"), restore_blend=v("restore_blend"), restore_fidelity=v("restore_fidelity"),
             formats=formats, layout=v("layout"), punch=v("punch"), punch_zoom=v("punch_zoom"),
             cut_pauses=v("cut_pauses"),
@@ -1248,6 +1252,7 @@ class MainWindow(QMainWindow):
             self.w[k].setEnabled(v("enhance") != "off")
         self.w["restore_blend"].setEnabled(v("restore") != "off")
         self.w["bg_blur_amount"].setEnabled(v("bg_blur"))
+        self.w["bg_engine"].setEnabled(v("bg_blur"))
         self.w["look_room_amount"].setEnabled(v("look_room"))
         self.w["skin_strength"].setEnabled(v("skin"))
         for k in ("beauty_smooth", "beauty_blemish", "beauty_wrinkles"):

@@ -54,7 +54,7 @@ Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for $15–30 a 
 - **Colour looks:** warm, cool, cinema, pop, vintage, black & white, plus **auto white balance** and exposure — and a manual **grade** (temperature, tint, exposure, contrast, saturation, shadows, highlights, vignette) baked into the same fast LUT.
 - **Lift dark shots:** neural low-light boost — SG-LLIE (fast) or URetinex (quality) — with a strength slider.
 - **Enhance:** fast sharpening or Real-ESRGAN AI upscaling of the crop.
-- **Blur background:** portrait-lens look — a recurrent RVM matte keeps the subject sharp and blurs the rest.
+- **Blur background:** portrait-lens look — two matting engines (fast recurrent RVM or finer **MODNet**, 24 MB once), edges snapped to the real pixels with a guided filter.
 
 ### Audio
 - **Cinematic dialogue** in one click: denoise (**RNNoise**, **DeepFilterNet** — strongest on changing noise — or classic FFT), de-ess, de-reverb, rumble/boxiness cut, compression, warmth/presence/air EQ, −14 LUFS.
