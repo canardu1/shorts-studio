@@ -28,7 +28,7 @@ Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for $15–30 a 
 - **Multi-format:** 9:16, 4:5, 1:1 and 16:9 from one analysis.
 
 ### Automatic editing
-- **Cut pauses** with a neural voice-activity detector (Silero VAD, bundled — falls back to an adaptive silence threshold without it), **cut breaths**, **cut filler words** (*uhm, ehm, uh…*) and **cut retakes** (repeated lines — the last take wins).
+- **Cut pauses** with a selectable speech detector — neural voice-activity detection (Silero VAD, bundled) or a classic level/dB threshold (automatic fallback if the model is missing) — plus **cut breaths**, **cut filler words** (*uhm, ehm, uh…*) and **cut retakes** (repeated lines — the last take wins).
 - **Best moments finder:** proposes the strongest 30–60 s clips of a long video (dense speech, a hook in the first sentence, ends on a full sentence).
 - **Clip ranges** and **batch processing** of a whole folder.
 
@@ -101,7 +101,7 @@ face-reframe-app
 
 To build a standalone `.app` bundle: `packaging/build_mac.sh`.
 
-Typical flow: add videos → **Analizza volti** (analyse faces) → tune on the live preview → **Crea short**.
+Typical flow: add videos → **Analyze faces** → tune on the live preview → **Create short**.
 The full option guide is in [docs/shorts-studio.md](docs/shorts-studio.md).
 
 ### DaVinci Resolve scripts
