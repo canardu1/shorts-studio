@@ -1,6 +1,19 @@
 # Demo media
 
-The main README shows three files from this folder. Make them from your own footage (people in the videos must agree to appear):
+The main README shows files from this folder.
+
+## App UI shots (no footage needed)
+
+`app.png` (full window) and `timeline.gif` (manual cut/restore) are rendered by
+driving the real window offscreen on a synthetic clip:
+
+```bash
+python scripts/shoot_ui.py
+```
+
+## Feature demos (from your own footage)
+
+Make them from your own footage — people in the videos must agree to appear:
 
 | File | What | How |
 |---|---|---|
