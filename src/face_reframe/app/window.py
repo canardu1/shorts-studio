@@ -310,6 +310,8 @@ class MainWindow(QMainWindow):
         self._restorer = None        # preview face restorer (built in the background)
         self._restorer_key = None
         self._matter = None          # preview person matte for background blur
+        self._matter_mod = None      # MODNet matte for still-frame preview
+        self._preview_moving = False  # set per frame: preview is scrubbing/playing
         self._restore_pending = None
         self._frame_at = 0.0         # wall clock of the last previewed frame
 
@@ -755,7 +757,7 @@ class MainWindow(QMainWindow):
         f.addRow(W["bg_blur"])
         f.addRow(tr("Strength"), W["bg_blur_amount"])
         f.addRow(tr("Matte engine"), W["bg_engine"])
-        f.addRow(hint(tr("MODNet (24 MB once) cuts much finer edges — hair, glasses, hands. The preview always shows the fast engine; the export uses the one you pick. Edges are snapped to real pixels either way.")))
+        f.addRow(hint(tr("MODNet (24 MB once) cuts much finer edges — hair, glasses, hands. The preview shows it on still frames (the fast engine keeps playback smooth); the export uses the one you pick.")))
         f.addRow(hint(tr("Neural person matte (RVM): keeps the subject sharp and blurs everything else, like a portrait lens. The 14 MB model downloads on first export.")))
         f.addRow(section(tr("Sharpness & upscale")))
         f.addRow(tr("Enhancement"), W["enhance"])
@@ -1723,7 +1725,21 @@ class MainWindow(QMainWindow):
                 if self._matter is None:
                     from .rvm import Matter
                     self._matter = Matter()
-                parts.insert(0, BlurBackground(self._matter, s.bg_blur))  # first: don't soften text
+                alt = None
+                if s.bg_engine == "modnet":
+                    from .. import models as _mdl
+                    if _mdl.available("modnet"):
+                        if self._matter_mod is None:
+                            from .rvm import ModnetMatter
+                            # per-frame engine: no temporal blend in preview —
+                            # stills may be seconds apart, blending would ghost
+                            self._matter_mod = ModnetMatter(temporal=0.0)
+                        alt = self._matter_mod
+                    else:
+                        info += tr(" · MODNet downloads on first export")
+                parts.insert(0, BlurBackground(self._matter, s.bg_blur,
+                                               alt_matter=alt,
+                                               use_alt=lambda: not self._preview_moving))  # first: don't soften text
             else:
                 info += tr(" · background blur: the model downloads on first export")
         if parts:
@@ -1814,6 +1830,7 @@ class MainWindow(QMainWindow):
         now = time.monotonic()
         moving = playing or self.slider.isSliderDown() or (now - self._frame_at < 0.12)
         self._frame_at = now
+        self._preview_moving = moving
         beauty = None if moving else self._beautifier()
         if beauty is None and self._beautifier() is not None:
             # every skipped frame arms a settle; only the last one's survives

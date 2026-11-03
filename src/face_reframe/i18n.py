@@ -608,8 +608,9 @@ _IT = {
     "Matte engine": "Motore scontorno",
     "Fast (RVM)": "Veloce (RVM)",
     "Quality (MODNet)": "Qualità (MODNet)",
-    "MODNet (24 MB once) cuts much finer edges — hair, glasses, hands. The preview always shows the fast engine; the export uses the one you pick. Edges are snapped to real pixels either way.":
-        "MODNet (24 MB una volta) scontorna molto meglio — capelli, occhiali, mani. L'anteprima mostra sempre il motore veloce; l'export usa quello scelto. In entrambi i bordi si agganciano ai pixel reali.",
+    "MODNet (24 MB once) cuts much finer edges — hair, glasses, hands. The preview shows it on still frames (the fast engine keeps playback smooth); the export uses the one you pick.":
+        "MODNet (24 MB una volta) scontorna molto meglio — capelli, occhiali, mani. L'anteprima lo mostra sui fotogrammi fermi (il motore veloce tiene fluida la riproduzione); l'export usa quello scelto.",
+    " · MODNet downloads on first export": " · MODNet si scarica al primo export",
     "RNNoise is light and safe, Spectral adapts to the measured noise floor, DeepFilterNet (15 MB binary, downloaded once) is strongest on changing noise like traffic or crowds. The dB depth sets DeepFilterNet's attenuation limit.":
         "RNNoise è leggero e sicuro, Spettrale si adatta al rumore misurato, DeepFilterNet (binario da 15 MB, scaricato una volta) è il più forte su rumori variabili come traffico e folla. I dB di profondità regolano l'attenuazione di DeepFilterNet.",
     "DeepFilterNet unavailable on this platform: RNNoise/spectral stay":

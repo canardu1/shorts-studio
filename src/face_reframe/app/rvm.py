@@ -147,16 +147,23 @@ class BlurBackground:
     sequential renders.
     """
 
-    def __init__(self, matter, strength: float = 0.6, refine: bool = True):
+    def __init__(self, matter, strength: float = 0.6, refine: bool = True,
+                 alt_matter=None, use_alt=None):
         self.matter, self.strength, self.refine = matter, strength, refine
+        self.alt_matter, self.use_alt = alt_matter, use_alt
         self._last = -1
 
     def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
         import cv2
         if self._last < 0 or i <= self._last:
             self.matter.reset()
+            if self.alt_matter is not None:
+                self.alt_matter.reset()
         self._last = i
-        a = np.clip(self.matter(frame), 0.0, 1.0).astype(np.float32)
+        m = self.alt_matter if (self.alt_matter is not None
+                                and self.use_alt is not None and self.use_alt()) \
+            else self.matter
+        a = np.clip(m(frame), 0.0, 1.0).astype(np.float32)
         if self.refine:
             a = refine_matte(frame, a)
         else:
