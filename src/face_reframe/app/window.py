@@ -260,6 +260,7 @@ class MainWindow(QMainWindow):
         self._restorer_key = None
         self._matter = None          # preview person matte for background blur
         self._restore_pending = None
+        self._frame_at = 0.0         # wall clock of the last previewed frame
 
         self.play_timer = QTimer(self)
         self.play_timer.timeout.connect(self._tick)
@@ -632,7 +633,7 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Skin smoothing"), W["beauty_smooth"])
         f.addRow(tr("Spots and blemishes"), W["beauty_blemish"])
         f.addRow(tr("Wrinkles and eye bags"), W["beauty_wrinkles"])
-        f.addRow(hint(tr("Only on face skin: eyes, eyebrows, lips, beard and hair stay sharp. Smoothing that keeps some grain (no plastic look), spots replaced by the skin around them, wrinkles softened and eye bags lightened. ~10–25 ms per face.")))
+        f.addRow(hint(tr("Only on face skin: eyes, eyebrows, lips, beard and hair stay sharp. Smoothing that keeps some grain (no plastic look), spots replaced by the skin around them, wrinkles softened and eye bags lightened. ~10–25 ms per face. The preview shows it on paused frames.")))
         f.addRow(section(tr("Skin")))
         f.addRow(W["skin"])
         f.addRow(tr("Strength"), W["skin_strength"])
@@ -1604,7 +1605,16 @@ class MainWindow(QMainWindow):
             playing and self._val("enhance") == "ai") else None
         from .jobs import _seed
         restore = improve and self._val("restore") != "off" and not self.play_timer.isActive()
-        beauty = self._beautifier()
+        # ~0.2 s per face with the neural mask: off while frames keep coming
+        # (playing, slider/timeline drag); _beauty_settle puts it back on the
+        # still frame once the motion ends
+        now = time.monotonic()
+        moving = playing or self.slider.isSliderDown() or (now - self._frame_at < 0.12)
+        self._frame_at = now
+        beauty = None if moving else self._beautifier()
+        if beauty is None and self._beautifier() is not None:
+            # every skipped frame arms a settle; only the last one's survives
+            QTimer.singleShot(150, self._beauty_settle)
         out = Framer(r, ow, oh, enh, self._punch, split_v, None, self._motion,
                      _seed(self.current), self._skin_now(), None if restore else beauty,
                      getattr(self, "_look", None))(i, frame)
@@ -1670,6 +1680,13 @@ class MainWindow(QMainWindow):
         self.out_view.zones = SAFE_ZONES.get(z) if z and self._val("aspect") == "9:16" else None
         self.out_view.set_frame(to_qimage(out), badge="%s · %dx%d" % (tag, ow2, oh2))
 
+    def _beauty_settle(self):
+        """The motion that skipped beauty just ended: repaint the still frame."""
+        if (self.play_timer.isActive() or self.slider.isSliderDown()
+                or time.monotonic() - self._frame_at < 0.14):
+            return    # still moving: the newest frame queued its own settle
+        self._refresh_frame()
+
     # ---------------------------------------------------------- preview face restoration
     def _restore_key(self):
         return (self._val("restore"), round(self._val("restore_fidelity"), 3), round(self._val("restore_blend"), 3))
@@ -1693,8 +1710,9 @@ class MainWindow(QMainWindow):
             r._prev = []  # preview frames aren't consecutive: no landmark smoothing
             img = r(out)
             if s.beauty is not None and s.beauty.active:
-                from ..beauty import Beautifier
-                img = Beautifier(s.beauty)(img)   # own instance: not shared across threads
+                from ..beauty import Beautifier, FaceParser, parse_available
+                b = Beautifier(s.beauty, parser=FaceParser() if parse_available() else None)
+                img = b(img)   # own instance: not shared across threads
             return i, key, r, img
 
         def done(res):

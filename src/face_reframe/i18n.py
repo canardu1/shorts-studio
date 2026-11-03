@@ -192,11 +192,12 @@ _IT = {
     "Wrinkles and eye bags": "Rughe e occhiaie",
     "Only on face skin: eyes, eyebrows, lips, beard and hair stay sharp. "
     "Smoothing that keeps some grain (no plastic look), spots replaced by the "
-    "skin around them, wrinkles softened and eye bags lightened. ~10–25 ms per face.":
+    "skin around them, wrinkles softened and eye bags lightened. ~10–25 ms per face. "
+    "The preview shows it on paused frames.":
         "Solo sulla pelle del viso: occhi, sopracciglia, labbra, barba e capelli restano "
         "nitidi. Levigatura che conserva un po' di grana (niente effetto plastica), "
         "macchie sostituite dalla pelle attorno, rughe attenuate e occhiaie schiarite. "
-        "Costo ~10–25 ms per volto.",
+        "Costo ~10–25 ms per volto. In anteprima si vede sui fotogrammi fermi.",
     "Skin": "Pelle",
     "Measures cheeks and forehead, then pulls the tint back to the natural skin line "
     "and removes excess saturation, only on skin colours: red clothes and background "
