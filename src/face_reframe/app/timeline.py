@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import List, Optional, Sequence, Tuple
 
 from PySide6.QtCore import QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtCore import QPointF
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -47,14 +47,19 @@ class Timeline(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         h = self.height()
         bar = QRectF(6, 9, self.width() - 12, 12)
-        p.fillRect(bar, QColor("#2a2f38"))
+        track = QPainterPath()
+        track.addRoundedRect(bar, 6, 6)
+        p.fillPath(track, QColor("#1d2129"))
+        p.save()
+        p.setClipPath(track)
         if self.clip is not None:
             a, b = self.clip
-            p.fillRect(QRectF(self._x(a), 9, self._x(b) - self._x(a), 12), QColor("#3b4352"))
+            p.fillRect(QRectF(self._x(a), 9, self._x(b) - self._x(a), 12), QColor("#313a48"))
         for a, b in self.removed:
             x0, x1 = self._x(a * self.fps), self._x(b * self.fps)
             p.fillRect(QRectF(x0, 9, max(1.0, x1 - x0), 12), QColor(229, 72, 77, 170))
-        p.setPen(QPen(QColor("#9aa3b0"), 1))
+        p.restore()
+        p.setPen(QPen(QColor("#8b93a1"), 1))
         for c in self.cuts:
             x = self._x(c)
             p.drawLine(QPointF(x, 6), QPointF(x, 24))
@@ -64,8 +69,10 @@ class Timeline(QWidget):
             x = self._x(m)
             p.drawPolygon(QPolygonF([QPointF(x, 1), QPointF(x + 4, 5), QPointF(x, 9), QPointF(x - 4, 5)]))
         x = self._x(self.pos)
-        p.setPen(QPen(QColor("#ffffff"), 2))
-        p.drawLine(QPointF(x, 3), QPointF(x, h - 3))
+        pen = QPen(QColor("#ffffff"), 2)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        p.drawLine(QPointF(x, 4), QPointF(x, h - 4))
 
     def _emit(self, ev):
         f = (ev.position().x() - 6) / max(1.0, self.width() - 12) * self.n

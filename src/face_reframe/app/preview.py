@@ -96,10 +96,18 @@ class FrameView(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
         p.setRenderHint(QPainter.Antialiasing)
-        p.fillRect(self.rect(), QColor("#111317"))
+        rr = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        clip = QPainterPath()
+        clip.addRoundedRect(rr, 9, 9)
+        p.fillPath(clip, QColor("#0d0f13"))
+        p.setClipPath(clip)
         if self._img is None or self._img.isNull():
-            p.setPen(QColor("#6b7280"))
+            p.setPen(QColor("#565f6d"))
             p.drawText(self.rect(), Qt.AlignCenter | Qt.TextWordWrap, self._placeholder)
+            p.setClipping(False)
+            p.setPen(QPen(QColor("#22262e"), 1))
+            p.setBrush(Qt.NoBrush)
+            p.drawRoundedRect(rr, 9, 9)
             return
         iw, ih = self._img.width(), self._img.height()
         s = min(self.width() / iw, self.height() / ih)
@@ -136,6 +144,10 @@ class FrameView(QWidget):
             p.drawRoundedRect(QRectF(target.x() + 8, target.y() + 8, bw, 22), 6, 6)
             p.setPen(QColor("#e5e7eb"))
             p.drawText(QRectF(target.x() + 8, target.y() + 8, bw, 22), Qt.AlignCenter, self._badge)
+        p.setClipping(False)
+        p.setPen(QPen(QColor("#22262e"), 1))
+        p.setBrush(Qt.NoBrush)
+        p.drawRoundedRect(rr, 9, 9)
 
     # ------------------------------------------------------------ dragging
     def _in_crop(self, pos) -> bool:

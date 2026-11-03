@@ -16,13 +16,14 @@ import traceback
 import numpy as np
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import QObject, QSettings, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QColor, QDesktopServices, QIcon, QKeySequence, QPalette, QPixmap, QShortcut
+from PySide6.QtCore import QObject, QPointF, QRectF, QSettings, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import (QColor, QDesktopServices, QIcon, QImage, QKeySequence, QPainter,
+                           QPalette, QPen, QPixmap, QPolygonF, QShortcut)
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox,
+    QAbstractItemView, QAbstractSpinBox, QApplication, QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox,
     QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QScrollArea, QSlider, QSpinBox, QSplitter, QStyle, QTabWidget, QToolButton, QVBoxLayout,
+    QScrollArea, QSlider, QSpinBox, QSplitter, QTabWidget, QToolButton, QVBoxLayout,
     QWidget,
 )
 
@@ -157,6 +158,8 @@ def dspin(lo, hi, step, val, dec=2, suffix=""):
     w.setSingleStep(step)
     w.setDecimals(dec)
     w.setValue(val)
+    w.setButtonSymbols(QAbstractSpinBox.PlusMinus)
+    w.setMinimumWidth(58)
     if suffix:
         w.setSuffix(suffix)
     return w
@@ -166,6 +169,8 @@ def ispin(lo, hi, val, suffix=""):
     w = QSpinBox()
     w.setRange(lo, hi)
     w.setValue(val)
+    w.setButtonSymbols(QAbstractSpinBox.PlusMinus)
+    w.setMinimumWidth(58)
     if suffix:
         w.setSuffix(suffix)
     return w
@@ -188,6 +193,12 @@ def hint(text):
     lab = QLabel(text)
     lab.setWordWrap(True)
     lab.setObjectName("hint")
+    return lab
+
+
+def section(text):
+    lab = QLabel(text.upper())
+    lab.setObjectName("section")
     return lab
 
 
@@ -261,6 +272,7 @@ class MainWindow(QMainWindow):
         self.pa_timer.timeout.connect(self._pa_refresh)
 
         root = QSplitter(Qt.Horizontal)
+        root.setHandleWidth(1)
         root.addWidget(self._build_queue())
         root.addWidget(self._build_preview())
         root.addWidget(self._build_settings())
@@ -270,6 +282,7 @@ class MainWindow(QMainWindow):
         root.setSizes([270, 800, 410])
 
         vs = QSplitter(Qt.Vertical)
+        vs.setHandleWidth(1)
         vs.addWidget(root)
         vs.addWidget(self._build_bottom())
         vs.setStretchFactor(0, 1)
@@ -295,6 +308,8 @@ class MainWindow(QMainWindow):
     # ================================================================ layout
     def _build_queue(self):
         box = QWidget()
+        box.setObjectName("panel")
+        box.setAttribute(Qt.WA_StyledBackground, True)
         lay = QVBoxLayout(box)
         lay.setContentsMargins(10, 10, 4, 10)
         title = QLabel("Video")
@@ -350,9 +365,12 @@ class MainWindow(QMainWindow):
 
     def _build_preview(self):
         box = QWidget()
+        box.setObjectName("previewPane")
+        box.setAttribute(Qt.WA_StyledBackground, True)
         lay = QVBoxLayout(box)
         lay.setContentsMargins(4, 10, 4, 6)
         views = QSplitter(Qt.Horizontal)
+        views.setHandleWidth(6)
         self.src_view = FrameView(tr("Select a video to preview"), draggable=True)
         self.src_view.crop_dragged.connect(self._crop_dragged)
         self.out_view = FrameView(tr("Vertical preview\n\nPress “Analyze faces”"))
@@ -366,14 +384,16 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.timeline)
         ctl = QHBoxLayout()
         self.play_btn = QToolButton()
-        self.play_btn.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.play_btn.setIcon(_icon("play"))
+        self.play_btn.setIconSize(QSize(20, 20))
         self.play_btn.clicked.connect(self._toggle_play)
         self.slider = QSlider(Qt.Horizontal)
         self.slider.valueChanged.connect(self._show_frame)
         self.slider.sliderMoved.connect(self._user_seek)
         self.slider.sliderReleased.connect(self._refresh_frame)
         self.mute_btn = QToolButton()
-        self.mute_btn.setIcon(self.style().standardIcon(QStyle.SP_MediaVolume))
+        self.mute_btn.setIcon(_icon("vol"))
+        self.mute_btn.setIconSize(QSize(18, 18))
         self.mute_btn.setToolTip(tr("Preview audio on/off"))
         self.mute_btn.clicked.connect(self._toggle_mute)
         self.ab_btn = QToolButton()
@@ -459,6 +479,8 @@ class MainWindow(QMainWindow):
 
     def _build_settings(self):
         col = QWidget()
+        col.setObjectName("panel")
+        col.setAttribute(Qt.WA_StyledBackground, True)
         cl = QVBoxLayout(col)
         cl.setContentsMargins(0, 8, 6, 0)
         prow = QHBoxLayout()
@@ -589,7 +611,7 @@ class MainWindow(QMainWindow):
         W["enhance"] = combo(ENHANCE)
         W["sharpen"] = dspin(0, 2, 0.05, 0.5)
         W["face_boost"] = dspin(0, 2, 0.05, 0.35)
-        f.addRow(QLabel("<b>%s</b>" % tr("Face restoration")))
+        f.addRow(section(tr("Face restoration")))
         f.addRow(tr("Model"), W["restore"])
         f.addRow(tr("Strength"), W["restore_blend"])
         f.addRow(tr("Fidelity (CodeFormer)"), W["restore_fidelity"])
@@ -604,13 +626,13 @@ class MainWindow(QMainWindow):
         W["beauty_smooth"] = dspin(0, 1, 0.05, 0.5)
         W["beauty_blemish"] = dspin(0, 1, 0.05, 0.5)
         W["beauty_wrinkles"] = dspin(0, 1, 0.05, 0.4)
-        f.addRow(QLabel("<b>%s</b>" % tr("Beauty")))
+        f.addRow(section(tr("Beauty")))
         f.addRow(W["beauty"])
         f.addRow(tr("Skin smoothing"), W["beauty_smooth"])
         f.addRow(tr("Spots and blemishes"), W["beauty_blemish"])
         f.addRow(tr("Wrinkles and eye bags"), W["beauty_wrinkles"])
         f.addRow(hint(tr("Only on face skin: eyes, eyebrows, lips, beard and hair stay sharp. Smoothing that keeps some grain (no plastic look), spots replaced by the skin around them, wrinkles softened and eye bags lightened. ~10–25 ms per face.")))
-        f.addRow(QLabel("<b>%s</b>" % tr("Skin")))
+        f.addRow(section(tr("Skin")))
         f.addRow(W["skin"])
         f.addRow(tr("Strength"), W["skin_strength"])
         f.addRow(self.skin_lab)
@@ -622,22 +644,22 @@ class MainWindow(QMainWindow):
         W["auto_wb"] = QCheckBox(tr("Auto white balance & exposure"))
         W["stabilize"] = QCheckBox(tr("Stabilize shaky footage"))
         W["stab_amount"] = dspin(0.1, 1.0, 0.05, 0.8)
-        f.addRow(QLabel("<b>%s</b>" % tr("Colour")))
+        f.addRow(section(tr("Colour")))
         f.addRow(tr("Look"), W["look"])
         f.addRow(tr("Look strength"), W["look_strength"])
         f.addRow(W["auto_wb"])
         f.addRow(hint(tr("Auto balance evens out colour and exposure: handy to give shorts of the same series the same look.")))
-        f.addRow(QLabel("<b>%s</b>" % tr("Stabilization")))
+        f.addRow(section(tr("Stabilization")))
         f.addRow(W["stabilize"])
         f.addRow(tr("Strength"), W["stab_amount"])
         f.addRow(hint(tr("Measures camera shake and compensates by shifting the crop (plus a slight rotation). The first run analyses the whole video.")))
-        f.addRow(QLabel("<b>%s</b>" % tr("Background")))
+        f.addRow(section(tr("Background")))
         W["bg_blur"] = QCheckBox(tr("Blur background"))
         W["bg_blur_amount"] = dspin(0.1, 1.5, 0.05, 0.6)
         f.addRow(W["bg_blur"])
         f.addRow(tr("Strength"), W["bg_blur_amount"])
         f.addRow(hint(tr("Neural person matte (RVM): keeps the subject sharp and blurs everything else, like a portrait lens. The 14 MB model downloads on first export.")))
-        f.addRow(QLabel("<b>%s</b>" % tr("Sharpness & upscale")))
+        f.addRow(section(tr("Sharpness & upscale")))
         f.addRow(tr("Enhancement"), W["enhance"])
         f.addRow(tr("Sharpening"), W["sharpen"])
         f.addRow(tr("Extra on face"), W["face_boost"])
@@ -658,7 +680,7 @@ class MainWindow(QMainWindow):
         W["mv_every"] = combo([(tr("Every cut"), "all"), (tr("Every other one"), "alternate"),
                                (tr("Only shot changes"), "shots")])
         W["mv_gap"] = dspin(0.5, 10, 0.5, 1.5, 1, " s")
-        f.addRow(QLabel("<b>%s</b>" % tr("Camera moves")))
+        f.addRow(section(tr("Camera moves")))
         f.addRow(W["mv_handheld"])
         f.addRow(tr("Strength"), W["mv_handheld_amount"])
         f.addRow(W["mv_push"])
@@ -667,7 +689,7 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Strength"), W["mv_crash_amount"])
         f.addRow(W["mv_shake"])
         f.addRow(tr("Strength"), W["mv_shake_amount"])
-        f.addRow(QLabel("<b>%s</b>" % tr("Cut transitions")))
+        f.addRow(section(tr("Cut transitions")))
         f.addRow(tr("Effect"), W["mv_transition"])
         f.addRow(tr("When"), W["mv_every"])
         f.addRow(tr("Min distance"), W["mv_gap"])
@@ -727,14 +749,14 @@ class MainWindow(QMainWindow):
                                   (tr("Bottom right"), "br"), (tr("Bottom left"), "bl")])
         W["logo_size"] = dspin(0.05, 0.4, 0.01, 0.16)
         W["logo_opacity"] = dspin(0.1, 1.0, 0.05, 0.85)
-        f.addRow(QLabel("<b>%s</b>" % tr("Opening title (hook)")))
+        f.addRow(section(tr("Opening title (hook)")))
         f.addRow(tr("Title"), W["hook"])
         f.addRow(tr("Text"), self.hook_edit)
         f.addRow(tr("Duration"), W["hook_dur"])
-        f.addRow(QLabel("<b>%s</b>" % tr("Closing")))
+        f.addRow(section(tr("Closing")))
         f.addRow(tr("Closing CTA"), self.cta_edit)
         f.addRow(tr("Duration"), W["cta_dur"])
-        f.addRow(QLabel("<b>%s</b>" % tr("Logo")))
+        f.addRow(section(tr("Logo")))
         f.addRow(tr("Image (PNG)"), lrow)
         f.addRow(tr("Position"), W["logo_corner"])
         f.addRow(tr("Size"), W["logo_size"])
@@ -812,11 +834,14 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(10, 6, 10, 8)
         row = QHBoxLayout()
         self.stage_lab = QLabel(tr("Ready"))
+        self.stage_lab.setObjectName("status")
         self.bar = QProgressBar()
         self.bar.setRange(0, 1000)
         self.bar.setTextVisible(False)
         self.start_btn = QPushButton(tr("Create short"))
         self.start_btn.setObjectName("accent")
+        self.start_btn.setMinimumHeight(34)
+        self.start_btn.setMinimumWidth(150)
         self.start_btn.clicked.connect(self._start)
         self.stop_btn = QPushButton("Stop")
         self.stop_btn.setEnabled(False)
@@ -1873,7 +1898,7 @@ class MainWindow(QMainWindow):
         self.play_timer.stop()
         if was_playing and self.proxy is not None:
             QTimer.singleShot(0, self._refresh_frame)  # the still from the original
-        self.play_btn.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.play_btn.setIcon(_icon("play"))
         if self.player:
             self.player.pause()
 
@@ -1888,7 +1913,7 @@ class MainWindow(QMainWindow):
         if self.proxy is not None:
             self.proxy.sequential = True
         self.play_timer.start(max(15, int(1000 / fps)))
-        self.play_btn.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
+        self.play_btn.setIcon(_icon("pause"))
         self._play_from(self.slider.value() / fps)
 
     def _user_seek(self, f):
@@ -1899,8 +1924,7 @@ class MainWindow(QMainWindow):
         self._muted = not self._muted
         if self.audio_out is not None:
             self.audio_out.setMuted(self._muted)
-        self.mute_btn.setIcon(self.style().standardIcon(
-            QStyle.SP_MediaVolumeMuted if self._muted else QStyle.SP_MediaVolume))
+        self.mute_btn.setIcon(_icon("vol_off" if self._muted else "vol"))
 
     def _tick(self):
         if not self.reader:
@@ -2738,52 +2762,194 @@ class MainWindow(QMainWindow):
 
 
 STYLE = """
-QWidget { font-size: 13px; }
-QLabel#h1 { font-size: 15px; font-weight: 600; }
-QLabel#hint { color: #8b93a1; font-size: 12px; }
-QPushButton { padding: 6px 12px; border-radius: 6px; background: #2a2e36; border: 1px solid #3a3f49; }
-QPushButton:hover { background: #333844; }
-QPushButton:disabled { color: #666; }
+/* ---------- base ---------- */
+QWidget { font-size: 13px; color: #e6e9ee; }
+QWidget#panel { background: #15181e; }
+QWidget#previewPane { background: #0e1014; }
+QLabel#h1 { font-size: 12px; font-weight: 700; color: #8f98a9; }
+QLabel#hint { color: #7d8695; font-size: 12px; }
+QLabel#status { color: #aab2c0; font-weight: 600; }
+QLabel#section {
+    color: #8f98a9; font-size: 11px; font-weight: 700;
+    padding: 10px 0 5px; border-bottom: 1px solid #232833; margin-bottom: 3px;
+}
+QDialog, QMenu { background: #15181e; }
+QToolTip { background: #22262e; color: #e6e9ee; border: 1px solid #353b47; padding: 6px 8px; }
+
+/* ---------- buttons ---------- */
+QPushButton {
+    padding: 6px 13px; border-radius: 7px;
+    background: #22262e; border: 1px solid #2e343f;
+}
+QPushButton:hover { background: #292e38; border-color: #39404c; }
+QPushButton:pressed { background: #1c2027; }
+QPushButton:disabled { color: #565d69; background: #1b1e24; border-color: #252931; }
 QPushButton#accent { background: #e5484d; border: none; color: white; font-weight: 600; }
-QPushButton#accent:hover { background: #f2555a; }
-QPushButton#accent:disabled { background: #5a2a2c; color: #aaa; }
-QListWidget, QPlainTextEdit, QLineEdit, QComboBox {
-    background: #1a1d23; border: 1px solid #2f343d; border-radius: 6px; padding: 3px; }
-QListWidget::item { padding: 6px 4px; }
-QListWidget::item:selected { background: #2f3542; color: white; }
-QPlainTextEdit { font-family: Menlo, Consolas, monospace; font-size: 11px; color: #b8c0cc; }
-QTabWidget::pane { border: 1px solid #2f343d; border-radius: 6px; top: -1px; }
-QTabBar::tab { padding: 6px 7px; background: transparent; color: #9aa3b0; }
-QTabBar::tab:selected { color: white; border-bottom: 2px solid #e5484d; }
+QPushButton#accent:hover { background: #f0565b; }
+QPushButton#accent:pressed { background: #cf3d42; }
+QPushButton#accent:disabled { background: #472628; color: #9a8485; }
+QToolButton {
+    padding: 5px 8px; border-radius: 6px;
+    background: transparent; border: 1px solid transparent; color: #c4cad4;
+}
+QToolButton:hover { background: #22262e; }
+QToolButton:pressed, QToolButton:checked { background: #2a2f39; border-color: #333945; }
+QToolButton#person { background: #181b21; border: 2px solid #2c313c; border-radius: 8px; color: #cbd2dc; }
+QToolButton#person:hover { border-color: #4a5260; }
+QToolButton#person:checked { border: 2px solid #e5484d; background: #32202a; }
+
+/* ---------- inputs ---------- */
+QLineEdit, QComboBox, QAbstractSpinBox {
+    background: #181b21; border: 1px solid #2c313c; border-radius: 6px;
+    padding: 4px 8px; min-height: 20px;
+    selection-background-color: #40343a;
+}
+QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus { border-color: #e5484d; }
+QLineEdit:disabled, QComboBox:disabled, QAbstractSpinBox:disabled { color: #565d69; }
+QComboBox::drop-down { border: none; width: 22px; }
+QComboBox QAbstractItemView {
+    background: #1d2129; border: 1px solid #333945; border-radius: 6px;
+    padding: 4px; outline: none;
+}
+QComboBox QAbstractItemView::item { padding: 5px 9px; border-radius: 4px; min-height: 20px; }
+QComboBox QAbstractItemView::item:selected { background: #40343a; color: #fff; }
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
+    width: 18px; border-left: 1px solid #232833; background: transparent;
+}
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover { background: #242933; }
+
+/* ---------- lists ---------- */
+QListWidget {
+    background: #111318; border: 1px solid #242933; border-radius: 8px; padding: 4px;
+}
+QListWidget::item { padding: 7px 8px; border-radius: 5px; }
+QListWidget::item:hover { background: #1c2028; }
+QListWidget::item:selected { background: #3a262b; color: #f3d4d6; }
+
+/* ---------- tabs ---------- */
+QTabWidget::pane { border: 1px solid #242933; border-radius: 8px; top: -1px; background: #12141a; }
+QTabBar::tab { padding: 7px 11px; background: transparent; color: #7d8695; }
+QTabBar::tab:hover { color: #b9c0cd; }
+QTabBar::tab:selected { color: #ffffff; border-bottom: 2px solid #e5484d; }
 QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }
-QProgressBar { background: #1a1d23; border: 1px solid #2f343d; border-radius: 4px; height: 8px; }
-QProgressBar::chunk { background: #e5484d; border-radius: 4px; }
-QSlider::groove:horizontal { height: 4px; background: #2f343d; border-radius: 2px; }
-QSlider::handle:horizontal { width: 14px; margin: -6px 0; border-radius: 7px; background: #e5e7eb; }
+
+/* ---------- sliders & progress ---------- */
+QSlider::groove:horizontal { height: 4px; background: #2a2f39; border-radius: 2px; }
+QSlider::handle:horizontal {
+    width: 14px; margin: -6px 0; border-radius: 7px;
+    background: #e5e7eb; border: 1px solid #9aa1ad;
+}
+QSlider::handle:horizontal:hover { background: #ffffff; }
 QSlider::sub-page:horizontal { background: #e5484d; border-radius: 2px; }
-QCheckBox::indicator { width: 15px; height: 15px; border: 1px solid #5b6270; border-radius: 4px; background: #1a1d23; }
-QCheckBox::indicator:checked { background: #e5484d; border-color: #e5484d; }
-QCheckBox:disabled, QLabel:disabled { color: #5b6270; }
-QToolButton#person { background: #1a1d23; border: 2px solid #2f343d; border-radius: 8px; color: #cbd2dc; }
-QToolButton#person:hover { border-color: #5b6270; }
-QToolButton#person:checked { border: 3px solid #e5484d; background: #2a1517; }
-QFrame#bottom { border-top: 1px solid #2a2e36; }
+QProgressBar { background: #1a1e25; border: none; border-radius: 5px; height: 10px; }
+QProgressBar::chunk { background: #e5484d; border-radius: 5px; }
+
+/* ---------- checkboxes ---------- */
+QCheckBox { spacing: 7px; }
+QCheckBox::indicator {
+    width: 15px; height: 15px;
+    border: 1px solid #3a4150; border-radius: 4px; background: #181b21;
+}
+QCheckBox::indicator:hover { border-color: #4a5260; }
+QCheckBox::indicator:checked {
+    background: #e5484d; border-color: #e5484d; image: url(__CHECK__);
+}
+QCheckBox:disabled, QLabel:disabled { color: #565d69; }
+
+/* ---------- scrollbars ---------- */
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px 2px 2px 0; }
+QScrollBar::handle:vertical { background: #333a45; min-height: 30px; border-radius: 4px; }
+QScrollBar::handle:vertical:hover { background: #454d5a; }
+QScrollBar:horizontal { background: transparent; height: 10px; margin: 0 2px 2px 2px; }
+QScrollBar::handle:horizontal { background: #333a45; min-width: 30px; border-radius: 4px; }
+QScrollBar::handle:horizontal:hover { background: #454d5a; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: none; }
+
+/* ---------- misc ---------- */
+QSplitter::handle { background: #1b1f26; }
+QSplitter::handle:hover { background: #e5484d; }
+QPlainTextEdit {
+    font-family: Menlo, Consolas, monospace; font-size: 11px; color: #98a0ad;
+    background: #0d0f13; border: 1px solid #20242c; border-radius: 8px; padding: 6px;
+}
+QFrame#bottom { background: #12141a; border-top: 1px solid #22262e; }
+QHeaderView::section {
+    background: #171a20; color: #8f98a9; border: none;
+    border-bottom: 1px solid #242933; padding: 5px 8px;
+}
+QTableWidget { background: #111318; border: 1px solid #242933; border-radius: 8px; gridline-color: #20242c; }
+QTableWidget::item:selected { background: #3a262b; }
+QMenu::item { padding: 5px 24px 5px 12px; border-radius: 4px; }
+QMenu::item:selected { background: #40343a; }
+QMenu::separator { height: 1px; background: #242933; margin: 4px 8px; }
 """
+
+
+def _icon(kind: str) -> QIcon:
+    """Small transport icons painted at runtime (no asset files, same look
+    on every platform)."""
+    img = QImage(64, 64, QImage.Format_ARGB32)
+    img.setDevicePixelRatio(2.0)
+    img.fill(Qt.transparent)
+    pt = QPainter(img)
+    pt.setRenderHint(QPainter.Antialiasing)
+    c = QColor("#c4cad4")
+    if kind == "play":
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        pt.drawPolygon(QPolygonF([QPointF(10, 5), QPointF(26, 16), QPointF(10, 27)]))
+    elif kind == "pause":
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        pt.drawRoundedRect(QRectF(8.5, 7, 5.5, 18), 1.8, 1.8)
+        pt.drawRoundedRect(QRectF(18, 7, 5.5, 18), 1.8, 1.8)
+    else:
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        pt.drawPolygon(QPolygonF([QPointF(6, 12), QPointF(11, 12), QPointF(17, 6),
+                                  QPointF(17, 26), QPointF(11, 20), QPointF(6, 20)]))
+        pt.setPen(QPen(c, 2.2, Qt.SolidLine, Qt.RoundCap))
+        pt.setBrush(Qt.NoBrush)
+        if kind == "vol":
+            pt.drawArc(QRectF(16, 11, 9, 10), -65 * 16, 130 * 16)
+            pt.drawArc(QRectF(16, 6, 14, 20), -55 * 16, 110 * 16)
+        else:
+            pt.drawLine(QPointF(21, 12), QPointF(28, 20))
+            pt.drawLine(QPointF(28, 12), QPointF(21, 20))
+    pt.end()
+    return QIcon(QPixmap.fromImage(img))
+
+
+def _check_png() -> str:
+    """White check glyph drawn once into the app cache: QSS needs an image
+    file to put a ✓ inside the checkbox indicator."""
+    p = os.path.join(diskcache.cache_dir(), "check.png")
+    if not os.path.exists(p):
+        img = QImage(32, 32, QImage.Format_ARGB32)
+        img.fill(Qt.transparent)
+        pt = QPainter(img)
+        pt.setRenderHint(QPainter.Antialiasing)
+        pt.setPen(QPen(Qt.white, 6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        pt.drawPolyline(QPolygonF([QPointF(9, 17), QPointF(14, 23), QPointF(24, 9)]))
+        pt.end()
+        img.save(p)
+    return p
 
 
 def apply_theme(app: QApplication):
     app.setStyle("Fusion")
     pal = QPalette()
     for role, col in [
-        (QPalette.Window, "#15171c"), (QPalette.WindowText, "#e5e7eb"), (QPalette.Base, "#1a1d23"),
-        (QPalette.AlternateBase, "#20242b"), (QPalette.Text, "#e5e7eb"), (QPalette.Button, "#2a2e36"),
-        (QPalette.ButtonText, "#e5e7eb"), (QPalette.Highlight, "#e5484d"),
-        (QPalette.HighlightedText, "#ffffff"), (QPalette.ToolTipBase, "#2a2e36"),
-        (QPalette.ToolTipText, "#e5e7eb"), (QPalette.PlaceholderText, "#6b7280"),
+        (QPalette.Window, "#101318"), (QPalette.WindowText, "#e6e9ee"), (QPalette.Base, "#181b21"),
+        (QPalette.AlternateBase, "#1e232c"), (QPalette.Text, "#e6e9ee"), (QPalette.Button, "#22262e"),
+        (QPalette.ButtonText, "#e6e9ee"), (QPalette.Highlight, "#e5484d"),
+        (QPalette.HighlightedText, "#ffffff"), (QPalette.ToolTipBase, "#22262e"),
+        (QPalette.ToolTipText, "#e6e9ee"), (QPalette.PlaceholderText, "#5d6673"),
     ]:
         pal.setColor(role, QColor(col))
     app.setPalette(pal)
-    app.setStyleSheet(STYLE)
+    app.setStyleSheet(STYLE.replace("__CHECK__", _check_png()))
 
 
 def main(argv=None) -> int:
