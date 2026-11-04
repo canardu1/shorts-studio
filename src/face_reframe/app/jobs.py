@@ -682,6 +682,9 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         return cb
 
     src_abs = os.path.abspath(src)
+    if s.output_dir and not os.path.isdir(s.output_dir):
+        log(tr("  output folder not found; saving next to the source"))
+        s.output_dir = None
     aspects = [s.reframe.aspect] + [a for a in s.formats if a != s.reframe.aspect]
     outs = [output_path(src, s, stem, a) for a in aspects]
     os.makedirs(os.path.dirname(outs[0]), exist_ok=True)
@@ -996,8 +999,16 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                     tmp = sl
                 else:
                     log(tr("  slow motion failed: keeping normal speed"))
-            os.makedirs(os.path.dirname(out), exist_ok=True)
-            shutil.move(tmp, out)
+            try:
+                os.makedirs(os.path.dirname(out), exist_ok=True)
+                shutil.move(tmp, out)
+            except OSError:
+                fallback = os.path.join(os.path.dirname(src_abs) or ".", os.path.basename(out))
+                if os.path.abspath(fallback) == os.path.abspath(out):
+                    raise
+                shutil.move(tmp, fallback)
+                log(tr("  output folder unavailable; saved next to the source instead"))
+                out = fallback
             done.append(out)
             if aspect == aspects[0] and s.cover:
                 try:
