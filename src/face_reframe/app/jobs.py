@@ -1019,7 +1019,7 @@ def make_cover(path: str, analysis, framer, out_w: int, out_h: int, title: str, 
     if fr is None:
         fr = analysis.frame_count // 3
     cap = cv2.VideoCapture(path)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, fr)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, analysis.start_frame + fr)
     ok, img = cap.read()
     cap.release()
     if not ok:
