@@ -258,6 +258,20 @@ def _fmt(sec: float) -> str:
 
 # ------------------------------------------------------------------ window
 
+def _extract_wav(src: str, out: str):
+    """Audio track of ``src`` as 48 kHz stereo WAV for the preview player
+    (None if the file has no audio or ffmpeg fails)."""
+    import subprocess
+    from ..silence import find_ffmpeg
+    try:
+        r = subprocess.run([find_ffmpeg(), "-y", "-v", "error", "-i", src, "-vn", "-map", "0:a:0",
+                            "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", out],
+                           capture_output=True, timeout=600)
+    except Exception:
+        return None
+    return out if r.returncode == 0 and os.path.exists(out) else None
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -309,6 +323,8 @@ class MainWindow(QMainWindow):
         self._pending_seek = None
         self._seek_guard = None      # (target source time, wall clock) of the last seek
         self._pa_dir = None
+        self._orig_wav = {}                      # {"src": video, "path": audio-only WAV}
+        self._resync_at = 0.0
         self.pa_timer = None
         self.proxy: Optional[VideoReader] = None   # light copy for smooth playback
         self._proxy_retries = set()                # files already given one proxy rebuild
@@ -1865,20 +1881,49 @@ class MainWindow(QMainWindow):
         if not path or os.path.abspath(path) in self.pcm or self._busy("Audio"):
             return
 
+        wav = os.path.join(self._pa_tmpdir(), "orig_%d.wav" % (abs(hash(os.path.abspath(path))) % 10**9))
+
         def job(_progress):
             from ..silence import extract_audio
             try:
-                return path, extract_audio(path)
+                pcm = extract_audio(path)
             except Exception:
-                return path, None
+                return path, None, None
+            return path, pcm, _extract_wav(path, wav)
 
         self._run(job, self._audio_loaded, "Audio")
 
     def _audio_loaded(self, res):
-        path, pcm = res
-        if pcm is not None and path == self.current:
+        path, pcm, wav = res
+        if path != self.current:
+            return
+        if wav:
+            # the player's "original" soundtrack: an audio-only WAV loads and
+            # seeks in milliseconds, a 4K camera file can take a second and
+            # starves playback while it does
+            old = self._orig_wav.get("path")
+            if old and old != wav:
+                try:
+                    os.unlink(old)
+                except OSError:
+                    pass
+            self._orig_wav = {"src": os.path.abspath(path), "path": wav}
+        if pcm is not None:
             self.pcm = {os.path.abspath(path): pcm}
             self.replan_timer.start()
+
+    def _pa_tmpdir(self) -> str:
+        if self._pa_dir is None:
+            import tempfile
+            self._pa_dir = tempfile.mkdtemp(prefix="shorts_preview_")
+        return self._pa_dir
+
+    def _orig_src(self) -> str:
+        """What the player plays for the untreated soundtrack."""
+        w = self._orig_wav
+        if w.get("src") == os.path.abspath(self.current or "") and os.path.exists(w.get("path", "")):
+            return w["path"]
+        return self.current
 
     def preview_options(self) -> Options:
         o = self.reframe_options()
@@ -2518,7 +2563,7 @@ class MainWindow(QMainWindow):
                 self._set_source(w["path"], w["start"], t)
                 return
             self._pa_build(t)  # meanwhile: original audio, swapped when ready
-        self._set_source(self.current, 0.0, t)
+        self._set_source(self._orig_src(), 0.0, t)
 
     def _pa_refresh(self):
         if self.play_timer.isActive() and self.player:
@@ -2529,9 +2574,7 @@ class MainWindow(QMainWindow):
         if self._busy(tr("Preview audio")):
             self._pa_pending = t
             return
-        if self._pa_dir is None:
-            import tempfile
-            self._pa_dir = tempfile.mkdtemp(prefix="shorts_preview_")
+        self._pa_tmpdir()
         key, s, src = self._pa_key(), self.job_settings(), self.current
         start = max(0.0, t - 0.5)
         dur = 40.0
@@ -2652,8 +2695,17 @@ class MainWindow(QMainWindow):
             if audio:
                 self._play_from(jump_t)
         elif audio and nxt < self.slider.value():
-            # the audio clock settling a frame or two back after a seek: hold
-            # the picture (stepping back would force a slow decoder seek)
+            import time
+            behind = (self.slider.value() - nxt) / fps
+            if (behind > 0.3 and self._seek_guard is None
+                    and time.monotonic() - self._resync_at > 1.0):
+                # the audio is far behind the picture (a slow load or a lost
+                # seek): bring the audio to the picture instead of freezing
+                # the picture until the sound catches up
+                self._resync_at = time.monotonic()
+                self._play_from(self.slider.value() / fps)
+            # a frame or two back after a seek: hold the picture (stepping
+            # back would force a slow decoder seek)
             nxt = self.slider.value()
         nxt = max(lo, min(hi, nxt))
         if nxt != self.slider.value():

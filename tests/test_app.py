@@ -185,16 +185,20 @@ def test_gui_preview_plays_treated_audio(talking_clip, tmp_path, monkeypatch):
             time.sleep(0.02)
         return cond()
 
+    def treated():
+        return os.path.basename(str(win._player_src)).startswith("pa_")
+
     win._toggle_play()
-    assert wait(lambda: str(win._player_src).endswith(".wav")), "treated audio never started"
+    assert wait(treated), "treated audio never started"
     first = win._player_src
-    win.ab_btn.setChecked(True)          # A/B -> original
-    assert wait(lambda: win._player_src == talking_clip, 3)
+    win.ab_btn.setChecked(True)          # A/B -> original (the source, or its audio-only WAV)
+    assert wait(lambda: win._player_src == win._orig_src(), 3)
+    assert win._player_src in (talking_clip, win._orig_wav.get("path"))
     win.ab_btn.setChecked(False)
-    assert wait(lambda: str(win._player_src).endswith(".wav"), 5)
+    assert wait(treated, 5)
     # edit -> rebuilt with the new sound (settings persist between runs: change for real)
     win._set("warmth", 3.0 if win._val("warmth") == 4.0 else 4.0)
-    assert wait(lambda: str(win._player_src).endswith(".wav") and win._player_src != first, 15)
+    assert wait(lambda: treated() and win._player_src != first, 15)
     assert win.slider.value() > 0
     win._toggle_play()
     win.close()
@@ -395,6 +399,57 @@ def test_gui_subtitle_editor(talking_clip, tmp_path, monkeypatch):
         app.processEvents()
         ed.grab().save(shot)
     ed.close()
+    win.close()
+    win.reader.close()
+    win.deleteLater()
+    app.processEvents()
+
+
+def test_gui_audio_behind_picture_resyncs_instead_of_freezing(talking_clip, tmp_path, monkeypatch):
+    """Regression: when the audio clock fell far behind the picture (a slow
+    source load, a lost seek), the picture froze until the sound caught up.
+    Now the audio is moved to the picture and playback keeps going."""
+    pytest.importorskip("PySide6")
+    try:
+        import PySide6.QtMultimedia  # noqa: F401
+    except ImportError:
+        pytest.skip("QtMultimedia not installed")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("SHORTS_STUDIO_CACHE", str(tmp_path / "cache"))
+    import time
+    from PySide6.QtWidgets import QApplication
+    from face_reframe.app.window import MainWindow
+    app = QApplication.instance() or QApplication([])
+    win = MainWindow()
+    win.add_files([talking_clip])
+    t0 = time.time()
+    while not win._orig_wav and time.time() - t0 < 20:      # original soundtrack as WAV
+        app.processEvents()
+        time.sleep(0.02)
+    assert win._orig_wav and win._orig_src().endswith(".wav")
+    win.skip_cuts.setChecked(False)
+    win._toggle_play()
+    t0 = time.time()
+    while time.time() - t0 < 1.5:
+        app.processEvents()
+        time.sleep(0.01)
+    if not win._audio_active():
+        win._toggle_play()
+        pytest.skip("no audio device: nothing to resync")
+    # knock the audio 2 s behind the picture, as a slow/lost seek would
+    win.player.setPosition(max(0, win.player.position() - 2000))
+    prev, last, stuck = win.slider.value(), time.time(), 0.0
+    t0 = time.time()
+    while time.time() - t0 < 3:
+        app.processEvents()
+        time.sleep(0.01)
+        v = win.slider.value()
+        if v != prev:
+            stuck = max(stuck, time.time() - last)
+            prev, last = v, time.time()
+    stuck = max(stuck, time.time() - last)
+    win._toggle_play()
+    assert stuck < 0.6, "picture froze %.2fs waiting for the audio" % stuck
     win.close()
     win.reader.close()
     win.deleteLater()
