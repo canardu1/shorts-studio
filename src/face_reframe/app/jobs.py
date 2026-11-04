@@ -93,6 +93,10 @@ class JobSettings:
     caption_words: int = 3
     caption_max_dur: float = 1.6
     caption_pos: float = 0.7
+    caption_anim: str = "off"
+    """Caption motion: ``off`` | ``fade`` | ``slide`` (rise in) | ``pop``
+    (scale pulse when the highlighted word changes). Typography (font, size,
+    box) lives in the caption renderer, not here."""
 
     person_by_file: Dict[str, List[np.ndarray]] = field(default_factory=dict)
     """Per-video "follow this person" picks (identity vectors), by abs path."""
@@ -450,7 +454,7 @@ class CaptionBurner:
 
     def __init__(self, events, fps: float, out_w: int, out_h: int,
                  renderer: Optional[CaptionRenderer], pos: float, style: str = "word",
-                 second_words=None):
+                 second_words=None, anim: str = "off"):
         self.second_words = second_words
         """Words of a second language: their text under each caption, smaller."""
         self._second = {}
@@ -458,7 +462,7 @@ class CaptionBurner:
         self.starts = [a for a, _, _ in events]
         self.fps, self.out_w, self.out_h = fps, out_w, out_h
         self.renderer = renderer or _cv_caption
-        self.pos, self.style = pos, style
+        self.pos, self.style, self.anim = pos, style, anim
         self._key, self._img = None, None
 
     def image_at(self, t: float) -> Optional[np.ndarray]:
@@ -489,18 +493,55 @@ class CaptionBurner:
             self._second[k] = img
         return self._second[k]
 
+    def _animate(self, img: np.ndarray, t: float, k: int, active: Optional[int]):
+        """Per-frame transform on the (cached) caption image.
+
+        ``fade`` ramps alpha at the event edges, ``slide`` rises and fades in,
+        ``pop`` pulses the scale when the highlighted word changes. Returns
+        (image, dy-offset) or None while the caption is fully transparent."""
+        if self.anim == "off" or k < 0:
+            return img, 0
+        a, b, grp = self.events[k]
+        alpha, sc, dy = 1.0, 1.0, 0
+        if self.anim == "fade":
+            alpha = min(1.0, (t - a) / 0.18, (b - t) / 0.18)
+        elif self.anim == "slide":
+            u = min(1.0, max(0.0, (t - a) / 0.22))
+            ease = 1.0 - (1.0 - u) ** 3
+            dy = int((1.0 - ease) * self.out_h * 0.035)
+            alpha = min(1.0, u * 1.6)
+        elif self.anim == "pop":
+            ts = grp[active].start if active is not None else a
+            dt = max(0.0, t - ts)
+            sc = 1.0 + 0.22 * np.exp(-dt / 0.09)
+        if alpha <= 0.01:
+            return None, 0
+        if sc > 1.001:
+            import cv2
+            img = cv2.resize(img, (int(img.shape[1] * sc), int(img.shape[0] * sc)),
+                             interpolation=cv2.INTER_LINEAR)
+        if alpha < 0.999:
+            img = img.copy()
+            img[..., 3] = (img[..., 3].astype(np.float32) * alpha).astype(np.uint8)
+        return img, dy
+
     def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
         t = i / self.fps
         img = self.image_at(t)
         if img is None:
             return frame
-        frame = blend(frame, img, self.out_w, self.out_h, self.pos)
+        k, active = self._key
+        img, dy = self._animate(img, t, k, active)
+        if img is None:
+            return frame
+        frame = blend(frame, img, self.out_w, self.out_h,
+                      self.pos + dy / float(self.out_h))
         if self.second_words:
-            k = bisect.bisect_right(self.starts, t) - 1
             sec = self._second_img(k) if k >= 0 else None
             if sec is not None:
                 frame = blend(frame, sec, self.out_w, self.out_h,
-                              self.pos + (img.shape[0] + sec.shape[0]) / 2.0 / self.out_h)
+                              self.pos + dy / float(self.out_h)
+                              + (img.shape[0] + sec.shape[0]) / 2.0 / self.out_h)
         return frame
 
 
@@ -911,7 +952,7 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                 # split screen: captions sit on the seam, off both faces
                 burner = CaptionBurner(events, fps, out_w, out_h, caption_renderer,
                                        0.5 if split is not None else s.caption_pos, s.caption_style,
-                                       second_words=second)
+                                       second_words=second, anim=s.caption_anim)
             hooks = []
             if s.bg_blur > 0 or s.bg_fill not in ("blur", "off"):
                 from .rvm import build as build_bg_blur

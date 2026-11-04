@@ -74,6 +74,7 @@ The honest trade-off: cloud tools offer web editors, team features and zero inst
 ### 💬 Captions
 - Local **Whisper transcription**, cached per file
 - **TikTok-style word-by-word** captions or classic lines — colour, position, uppercase
+- **Full styling** — any installed font, size, text/highlight colours, optional pill box, motion (fade, slide-up, pop-on-word)
 - **Subtitle editor** — fix words, find & replace, timings re-spread automatically
 - **English translation** or **bilingual** captions
 

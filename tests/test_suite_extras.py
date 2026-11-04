@@ -64,6 +64,41 @@ def test_overlays_progress_and_cards(tmp_path):
     assert early > 0 and late > early
 
 
+def test_caption_animations():
+    import cv2
+    from face_reframe.app.jobs import CaptionBurner
+    from face_reframe.transcribe import Word
+
+    def renderer(words, active, out_w):            # fake: solid white 40x8 px
+        return np.full((8, 40, 4), (255, 255, 255, 255), np.uint8)
+
+    fps, W, H = 25.0, 360, 640
+    blank = np.zeros((H, W, 3), np.uint8)
+
+    words = [Word(1.0, 1.4, "ciao"), Word(1.4, 1.8, "mondo"), Word(1.8, 2.4, "bello")]
+    ev_fade = [(1.0, 2.4, words)]
+    b = CaptionBurner(ev_fade, fps, W, H, renderer, 0.5, "word", anim="fade")
+    at_start = b(int(1.0 * fps), blank.copy())     # t=1.0: alpha ~0 -> nothing drawn
+    mid = b(int(1.7 * fps), blank.copy())          # inside the event: fully drawn
+    assert not at_start.any() and mid.any()
+
+    words = [Word(1.0, 1.5, "ciao"), Word(1.5, 2.5, "mondo"), Word(2.5, 3.0, "bello")]
+    ev_pop = [(1.0, 3.0, words)]
+    b = CaptionBurner(ev_pop, fps, W, H, renderer, 0.5, "word", anim="pop")
+    f_pop = b(int(1.56 * fps), blank.copy())       # just after word 2 starts: scaled up
+    f_settled = b(int(2.3 * fps), blank.copy())    # 0.8 s into the word: settled
+    assert f_pop.any() and f_settled.any()
+    # the pulsed caption covers more pixels than the settled one
+    assert (f_pop > 0).sum() > (f_settled > 0).sum()
+
+    b = CaptionBurner(ev_pop, fps, W, H, renderer, 0.5, "line", anim="slide")
+    early = b(int(1.06 * fps), blank.copy())       # slides up from below its slot
+    late = b(int(1.6 * fps), blank.copy())
+    ys_e = np.nonzero(early.any(axis=2).any(axis=1))[0]
+    ys_l = np.nonzero(late.any(axis=2).any(axis=1))[0]
+    assert len(ys_e) and len(ys_l) and ys_e.mean() > ys_l.mean()   # earlier = lower
+
+
 def test_fill_background_modes(tmp_path):
     import cv2
     from face_reframe.app import rvm

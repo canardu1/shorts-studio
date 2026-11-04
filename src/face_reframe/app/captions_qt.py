@@ -11,14 +11,14 @@ from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter, QPaint
 
 
 def make_renderer(color: str = "#FFFFFF", uppercase: bool = True, highlight: str = "#FFD400",
-                  size_frac: float = 0.075):
+                  size_frac: float = 0.075, family: str = "Arial Black", box: str = "none"):
     """Returns ``(words, active_index, out_w) -> BGRA ndarray``; safe to call
     from a worker thread (QImage painting doesn't need the GUI thread)."""
 
     def render(words: Sequence[str], active: Optional[int], out_w: int) -> np.ndarray:
         toks = [(w.upper() if uppercase else w).strip() for w in words]
         text = " ".join(toks)
-        font = QFont("Arial Black")
+        font = QFont(family)
         font.setStyleHint(QFont.SansSerif)
         font.setWeight(QFont.Black)
         font.setPixelSize(max(12, int(out_w * size_frac)))
@@ -27,7 +27,7 @@ def make_renderer(color: str = "#FFFFFF", uppercase: bool = True, highlight: str
             font.setPixelSize(int(font.pixelSize() * 0.92))
             fm = QFontMetricsF(font)
         stroke = max(3.0, font.pixelSize() * 0.16)
-        pad = int(stroke * 2)
+        pad = int(stroke * 2) if box == "none" else int(font.pixelSize() * 0.42)
         # the active word pops a little: leave room for it
         pop = 1.12 if active is not None else 1.0
         w = int(fm.horizontalAdvance(text) * pop) + 2 * pad
@@ -36,6 +36,11 @@ def make_renderer(color: str = "#FFFFFF", uppercase: bool = True, highlight: str
         img.fill(Qt.transparent)
         p = QPainter(img)
         p.setRenderHint(QPainter.Antialiasing)
+        if box == "pill":
+            from PySide6.QtCore import QRectF
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(0, 0, 0, 120))
+            p.drawRoundedRect(QRectF(0, 0, w, h), h * 0.32, h * 0.32)
         x = float(pad)
         space = fm.horizontalAdvance(" ")
         base = pad + fm.ascent() * pop

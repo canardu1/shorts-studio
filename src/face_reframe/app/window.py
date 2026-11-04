@@ -17,11 +17,11 @@ import numpy as np
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import QObject, QPointF, QRectF, QSettings, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import (QColor, QDesktopServices, QIcon, QImage, QKeySequence, QPainter,
+from PySide6.QtGui import (QColor, QDesktopServices, QFont, QIcon, QImage, QKeySequence, QPainter,
                            QPalette, QPen, QPixmap, QPolygonF, QShortcut)
 from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractSpinBox, QApplication, QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDoubleSpinBox,
-    QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
+    QDialog, QFileDialog, QFontComboBox, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QScrollArea, QSlider, QSpinBox, QSplitter, QTabWidget, QToolButton, QVBoxLayout,
     QWidget,
@@ -895,14 +895,24 @@ class MainWindow(QMainWindow):
         W["caption_hl"].setCurrentIndex(1)
         W["caption_upper"] = QCheckBox(tr("UPPERCASE"))
         W["caption_upper"].setChecked(True)
+        self.caption_font = QFontComboBox()
+        self.caption_font.setCurrentFont(QFont("Arial Black"))
+        W["caption_size"] = dspin(0.04, 0.14, 0.005, 0.075)
+        W["caption_box"] = combo([(tr("None"), "none"), (tr("Pill box"), "pill")])
+        W["caption_anim"] = combo([(tr("None"), "off"), (tr("Fade"), "fade"),
+                                   (tr("Slide up"), "slide"), (tr("Pop on word"), "pop")])
         f.addRow(tr("Captions"), W["subtitles"])
         f.addRow(tr("Style"), W["caption_style"])
         f.addRow(tr("Language"), W["language"])
         f.addRow(tr("Words per line"), W["caption_words"])
         f.addRow(tr("Max line duration"), W["caption_max_dur"])
         f.addRow(tr("Vertical position"), W["caption_pos"])
+        f.addRow(tr("Font"), self.caption_font)
+        f.addRow(tr("Size"), W["caption_size"])
         f.addRow(tr("Text colour"), W["caption_color"])
         f.addRow(tr("Active word colour"), W["caption_hl"])
+        f.addRow(tr("Background box"), W["caption_box"])
+        f.addRow(tr("Animation"), W["caption_anim"])
         f.addRow(W["caption_upper"])
         W["sub_lang"] = combo([(tr("Original language"), "orig"), (tr("English (translation)"), "en"),
                                (tr("Original + English below"), "both")])
@@ -1192,7 +1202,7 @@ class MainWindow(QMainWindow):
             music_path=self.music_path or None, music_db=v("music_db"), duck_ratio=v("duck"),
             subtitles=v("subtitles"), caption_style=v("caption_style"), language=v("language"),
             caption_words=int(v("caption_words")), caption_max_dur=v("caption_max_dur"),
-            caption_pos=v("caption_pos"),
+            caption_pos=v("caption_pos"), caption_anim=v("caption_anim"),
             person_by_file=dict(self.person_pick),
             motion=self.motion_settings(),
             manual_by_file={k: list(m) for k, m in self.manual.items() if m},
@@ -1344,6 +1354,7 @@ class MainWindow(QMainWindow):
         self._set_bg("video", st.value("bg_video", "") or "")
         self.bg_color = st.value("bg_color", "#00b140") or "#00b140"
         self._bg_color_swatch()
+        self.caption_font.setCurrentFont(QFont(st.value("caption_font", "Arial Black") or "Arial Black"))
         self.user_presets = presets.load_user(st.value("presets", "") or "")
         self._fill_presets()
         geo = st.value("geometry")
@@ -1369,6 +1380,7 @@ class MainWindow(QMainWindow):
         st.setValue("bg_image", self.bg_image_path)
         st.setValue("bg_video", self.bg_video_path)
         st.setValue("bg_color", self.bg_color)
+        st.setValue("caption_font", self.caption_font.currentFont().family())
         st.setValue("presets", presets.dump_user(self.user_presets))
         st.setValue("geometry", self.saveGeometry())
 
@@ -1400,8 +1412,10 @@ class MainWindow(QMainWindow):
         self.w["restore_fidelity"].setEnabled(v("restore") == "codeformer")
         for k in ("language", "caption_words", "caption_max_dur"):
             self.w[k].setEnabled(v("subtitles") != "off")
-        for k in ("caption_style", "caption_pos", "caption_color", "caption_upper"):
+        for k in ("caption_style", "caption_pos", "caption_color", "caption_upper",
+                  "caption_size", "caption_box", "caption_anim"):
             self.w[k].setEnabled(v("subtitles") == "burn")
+        self.caption_font.setEnabled(v("subtitles") == "burn")
         self.w["caption_hl"].setEnabled(v("subtitles") == "burn" and v("caption_style") == "word")
         self.w["punch_zoom"].setEnabled(v("punch"))
         for k in ("handheld", "push", "crash", "shake"):
@@ -1857,7 +1871,7 @@ class MainWindow(QMainWindow):
             parts.append(CaptionBurner(group_word_events(cap_words, s.caption_words, s.caption_max_dur),
                                        fps, ow, oh, self._caption_renderer(),
                                        0.5 if self._split is not None else s.caption_pos,
-                                       s.caption_style, second_words=second))
+                                       s.caption_style, second_words=second, anim=s.caption_anim))
         ov = s.overlays
         if ov is not None:
             from .overlays import build as build_overlays, first_sentence
@@ -1929,7 +1943,9 @@ class MainWindow(QMainWindow):
             try:
                 from .captions_qt import make_renderer
                 self._renderer = make_renderer(self._val("caption_color"), self._val("caption_upper"),
-                                               self._val("caption_hl"))
+                                               self._val("caption_hl"), self._val("caption_size"),
+                                               self.caption_font.currentFont().family(),
+                                               self._val("caption_box"))
             except Exception:
                 self._renderer = None
         return self._renderer
@@ -2950,7 +2966,7 @@ class MainWindow(QMainWindow):
             "music": self.music_path or "", "logo": self.logo_path or "", "cta": self.cta_edit.text(),
             "card_in": self.card_in_path or "", "card_out": self.card_out_path or "",
             "bg_image": self.bg_image_path or "", "bg_video": self.bg_video_path or "",
-            "bg_color": self.bg_color,
+            "bg_color": self.bg_color, "caption_font": self.caption_font.currentFont().family(),
             "out_dir": self.out_dir.text(), "suffix": self.suffix.text(),
             "current": self.current or "",
         }
@@ -2989,6 +3005,8 @@ class MainWindow(QMainWindow):
         self._set_bg("video", d.get("bg_video") or "")
         self.bg_color = d.get("bg_color") or "#00b140"
         self._bg_color_swatch()
+        if d.get("caption_font"):
+            self.caption_font.setCurrentFont(QFont(d["caption_font"]))
         self.cta_edit.setText(d.get("cta") or "")
         self.out_dir.setText(d.get("out_dir") or "")
         self.suffix.setText(d.get("suffix") or "_short")
@@ -3356,7 +3374,9 @@ class MainWindow(QMainWindow):
         try:
             from .captions_qt import make_renderer
             renderer = make_renderer(self._val("caption_color"), self._val("caption_upper"),
-                                     self._val("caption_hl"))
+                                     self._val("caption_hl"), self._val("caption_size"),
+                                     self.caption_font.currentFont().family(),
+                                     self._val("caption_box"))
         except Exception as exc:
             self._log(tr("Qt captions unavailable (%s), using OpenCV") % exc)
         for i in range(len(items)):
