@@ -43,6 +43,27 @@ def test_overlays_hook_logo_cta(tmp_path):
     assert last[centre].any() and not mid[centre].any()            # CTA only at the end
 
 
+def test_overlays_progress_and_cards(tmp_path):
+    import cv2
+    card = np.full((100, 100, 3), (0, 0, 255), np.uint8)   # red card
+    cp = str(tmp_path / "card.png")
+    cv2.imwrite(cp, card)
+    o = overlays.OverlaySettings(progress="bottom", card_in_path=cp, card_in_dur=1.0,
+                                 card_out_path=cp, card_out_dur=1.0)
+    parts = overlays.build(o, "", 100, 25.0, 360, 640, None)
+    chain = overlays.Chain(parts)
+    blank = np.zeros((640, 360, 3), np.uint8)
+    # card windows: intro [0,25), outro [75,100); past the 8-frame fades
+    first, mid, last = chain(12, blank.copy()), chain(50, blank.copy()), chain(88, blank.copy())
+    assert first[..., 2].mean() > 200          # intro card covers the frame early on
+    assert mid[..., 2].mean() < 20             # ...but not in the middle
+    assert last[..., 2].mean() > 200           # outro card covers the end
+    # progress bar: the accent-coloured bar on the bottom edge grows with time
+    early = chain(30, blank.copy())[636:, :, 2].sum()
+    late = chain(60, blank.copy())[636:, :, 2].sum()
+    assert early > 0 and late > early
+
+
 def test_look_tables():
     rng = np.random.default_rng(0)
     img = rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)

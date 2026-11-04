@@ -288,6 +288,8 @@ class MainWindow(QMainWindow):
         self.user_presets: Dict[str, dict] = {}
         self.music_path = ""
         self.logo_path = ""
+        self.card_in_path = ""
+        self.card_out_path = ""
         self.hook_text: Dict[str, str] = {}     # abs path -> custom hook title
         self._undo: List[tuple] = []
         self._redo: List[tuple] = []
@@ -909,6 +911,36 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Position"), W["logo_corner"])
         f.addRow(tr("Size"), W["logo_size"])
         f.addRow(tr("Opacity"), W["logo_opacity"])
+        W["progress_bar"] = combo([(tr("Off"), "off"), (tr("Top"), "top"), (tr("Bottom"), "bottom")])
+        self.card_in_edit = QLineEdit()
+        self.card_in_edit.setReadOnly(True)
+        self.card_in_edit.setPlaceholderText(tr("No intro card"))
+        self.card_out_edit = QLineEdit()
+        self.card_out_edit.setReadOnly(True)
+        self.card_out_edit.setPlaceholderText(tr("No outro card"))
+        W["card_in_dur"] = dspin(0.5, 8, 0.5, 1.5, 1, " s")
+        W["card_out_dur"] = dspin(0.5, 8, 0.5, 2.0, 1, " s")
+
+        def _card_row(edit, which):
+            pb = QPushButton("…")
+            pb.setFixedWidth(32)
+            pb.clicked.connect(lambda: self._pick_card(which))
+            pc = QPushButton("✕")
+            pc.setFixedWidth(32)
+            pc.clicked.connect(lambda: self._set_card(which, ""))
+            r = QHBoxLayout()
+            r.addWidget(edit, 1)
+            r.addWidget(pb)
+            r.addWidget(pc)
+            return r
+
+        f.addRow(section(tr("Branding")))
+        f.addRow(tr("Progress bar"), W["progress_bar"])
+        f.addRow(tr("Intro card"), _card_row(self.card_in_edit, "in"))
+        f.addRow(tr("Duration"), W["card_in_dur"])
+        f.addRow(tr("Outro card"), _card_row(self.card_out_edit, "out"))
+        f.addRow(tr("Duration"), W["card_out_dur"])
+        f.addRow(hint(tr("Cards are full-frame images shown at the start/end — the video keeps playing underneath.")))
         f.addRow(hint(tr("After “Transcribe”, the captions show in the vertical preview.")))
         tabs.addTab(self._page(f), tr("Texts"))
 
@@ -1138,7 +1170,9 @@ class MainWindow(QMainWindow):
         return OverlaySettings(hook=v("hook"), hook_dur=v("hook_dur"), cta=self.cta_edit.text(),
                                cta_dur=v("cta_dur"), logo_path=self.logo_path or None,
                                logo_corner=v("logo_corner"), logo_size=v("logo_size"),
-                               logo_opacity=v("logo_opacity"))
+                               logo_opacity=v("logo_opacity"), progress=v("progress_bar"),
+                               card_in_path=self.card_in_path or None, card_in_dur=v("card_in_dur"),
+                               card_out_path=self.card_out_path or None, card_out_dur=v("card_out_dur"))
 
     def _hook_edited(self, text):
         if self.current:
@@ -1157,6 +1191,20 @@ class MainWindow(QMainWindow):
     def _set_logo(self, path):
         self.logo_path = path if path and os.path.exists(path) else ""
         self.logo_edit.setText(os.path.basename(self.logo_path))
+        self._settings_changed()
+
+    def _pick_card(self, which):
+        f, _ = QFileDialog.getOpenFileName(self, tr("Card image"), "", tr("Images (*.png *.jpg *.jpeg *.webp)"))
+        if f:
+            self._set_card(which, f)
+
+    def _set_card(self, which, path):
+        p = path if path and os.path.exists(path) else ""
+        if which == "in":
+            self.card_in_path, edit = p, self.card_in_edit
+        else:
+            self.card_out_path, edit = p, self.card_out_edit
+        edit.setText(os.path.basename(p))
         self._settings_changed()
 
     def beauty_settings(self):
@@ -2809,6 +2857,7 @@ class MainWindow(QMainWindow):
             "manual_cuts": {k: [[m[0], m[1]] for m in v] for k, v in self.manual_cuts.items() if v},
             "hook_text": {k: t for k, t in self.hook_text.items() if t},
             "music": self.music_path or "", "logo": self.logo_path or "", "cta": self.cta_edit.text(),
+            "card_in": self.card_in_path or "", "card_out": self.card_out_path or "",
             "out_dir": self.out_dir.text(), "suffix": self.suffix.text(),
             "current": self.current or "",
         }
@@ -2841,6 +2890,8 @@ class MainWindow(QMainWindow):
         self.hook_text = dict(d.get("hook_text") or {})
         self._set_music(d.get("music") or "")
         self._set_logo(d.get("logo") or "")
+        self._set_card("in", d.get("card_in") or "")
+        self._set_card("out", d.get("card_out") or "")
         self.cta_edit.setText(d.get("cta") or "")
         self.out_dir.setText(d.get("out_dir") or "")
         self.suffix.setText(d.get("suffix") or "_short")

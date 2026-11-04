@@ -57,6 +57,14 @@ class OverlaySettings:
     logo_corner: str = "tr"
     logo_size: float = 0.16
     logo_opacity: float = 0.85
+    progress: str = "off"
+    """``off`` | ``top`` | ``bottom`` — retention progress bar along an edge."""
+    card_in_path: Optional[str] = None
+    """Intro card: a full-frame image shown at the start."""
+    card_in_dur: float = 1.5
+    card_out_path: Optional[str] = None
+    """Outro card: a full-frame image shown at the end."""
+    card_out_dur: float = 2.0
 
 
 def first_sentence(words, max_words: int = 9) -> str:
@@ -121,6 +129,53 @@ class Logo:
         return frame
 
 
+class ProgressBar:
+    """Thin bar along the top/bottom edge that fills with playback time —
+    the "watch to the end" cue viewers got used to on TikTok/Reels."""
+
+    COLOR = (77, 72, 229)  # app accent #e5484d, BGR
+
+    def __init__(self, n: int, out_w: int, out_h: int, pos: str = "top", frac: float = 0.007):
+        self.n, self.w = n, out_w
+        th = max(3, int(out_h * frac))
+        self.y0, self.y1 = (0, th) if pos == "top" else (out_h - th, out_h)
+
+    def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
+        import cv2
+        frame = frame if frame.flags.writeable else frame.copy()
+        cv2.rectangle(frame, (0, self.y0), (int(self.w * (i + 1) / self.n), self.y1), self.COLOR, -1)
+        return frame
+
+
+class Card:
+    """Full-frame image for a few seconds (intro/outro card).
+
+    Cover-fitted to the output size; cross-fades with the video at the edges,
+    fully replaces the frame in between. The audio keeps running."""
+
+    def __init__(self, path: str, a: int, b: int, out_w: int, out_h: int, fade: int = 8):
+        import cv2
+        img = cv2.imread(path)
+        if img is None:
+            raise IOError(tr("unreadable card image: %s") % path)
+        sc = max(out_w / img.shape[1], out_h / img.shape[0])          # cover, not fit
+        img = cv2.resize(img, (int(img.shape[1] * sc + 0.5), int(img.shape[0] * sc + 0.5)),
+                         interpolation=cv2.INTER_AREA if sc < 1.0 else cv2.INTER_LANCZOS4)
+        x0 = max(0, (img.shape[1] - out_w) // 2)
+        y0 = max(0, (img.shape[0] - out_h) // 2)
+        self.img = img[y0:y0 + out_h, x0:x0 + out_w]
+        self.a, self.b, self.fade = a, b, max(1, fade)
+
+    def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
+        if not (self.a <= i < self.b):
+            return frame
+        k = min(1.0, (i - self.a + 1) / self.fade, (self.b - i) / self.fade)
+        if k >= 1.0:
+            return self.img.copy()
+        import cv2
+        return cv2.addWeighted(self.img, k, frame, 1.0 - k, 0)
+
+
 class Chain:
     """Several ``post_frame`` hooks in order (captions, hook, logo, CTA...)."""
 
@@ -151,4 +206,14 @@ def build(o: OverlaySettings, hook_text: str, n: int, fps: float, out_w: int, ou
     if o.cta.strip():
         a = max(0, n - int(o.cta_dur * fps))
         parts.append(TimedImage(render(o.cta.strip(), out_w), a, n, 0.5, fade=8))
+    if o.progress in ("top", "bottom"):
+        parts.append(ProgressBar(n, out_w, out_h, o.progress))
+    for path, dur, a0 in ((o.card_in_path, o.card_in_dur, 0),
+                          (o.card_out_path, o.card_out_dur, None)):
+        if path and os.path.exists(path):
+            a = a0 if a0 is not None else max(0, n - int(dur * fps))
+            try:
+                parts.append(Card(path, a, min(n, a + int(dur * fps)), out_w, out_h))
+            except IOError as exc:
+                log("  %s" % exc)
     return parts

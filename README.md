@@ -99,6 +99,8 @@ The honest trade-off: cloud tools offer web editors, team features and zero inst
 ### 🚀 Publishing
 - **Hook title** on screen for the first seconds
 - **Logo/watermark** + closing **CTA** card
+- **Progress bar** along the edge — the "watch to the end" cue
+- **Intro/outro cards** — full-frame brand images at the start and end
 - **Thumbnails** that look like a creator made them — best expressive frame, cut-out subject, 4 styles, highlighted word
 - **Title, description and hashtags** drafted from the transcript
 
