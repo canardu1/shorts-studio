@@ -40,6 +40,8 @@ class MotionSettings:
     """``all`` cuts, ``alternate`` (every other one) or ``shots`` (camera changes only)."""
     min_gap: float = 1.5
     """Seconds between two punctual effects (crash, shake, transitions)."""
+    beat_sync: bool = False
+    """Snap crash/shake triggers to the nearest music beat (see ``beats``)."""
 
     @property
     def active(self) -> bool:
@@ -113,6 +115,51 @@ def _thin(times: Sequence[float], gap: float) -> List[float]:
     return out
 
 
+def beats(pcm: Optional[np.ndarray], sr: int = 16000, min_gap: float = 0.28) -> List[float]:
+    """Music-beat times via spectral-flux onset detection (numpy only):
+    strong transients (kick, snare, strum) above the local energy trend."""
+    if pcm is None or len(pcm) < sr:
+        return []
+    win, hop = 1024, 512
+    n = 1 + (len(pcm) - win) // hop
+    if n < 8:
+        return []
+    idx = np.arange(win)
+    S = np.stack([pcm[i * hop + idx] for i in range(n)]).astype(np.float32) \
+        * np.hanning(win).astype(np.float32)
+    mag = np.abs(np.fft.rfft(S, axis=1))
+    flux = np.maximum(mag[1:] - mag[:-1], 0).sum(axis=1)
+    if flux.max() <= 0:
+        return []
+    k = max(4, int(round(sr / hop * 1.0)))              # ~1 s of context
+    loc = np.convolve(flux, np.ones(k) / k, mode="same")
+    thr = np.percentile(flux, 75)
+    out, last = [], -1e9
+    for i in range(1, len(flux) - 1):
+        t = i * hop / sr
+        if (flux[i] > thr and flux[i] > loc[i] * 1.3
+                and flux[i] >= flux[i - 1] and flux[i] >= flux[i + 1]
+                and t - last >= min_gap):
+            out.append(t)
+            last = t
+    return out
+
+
+def _snap_to_beat(times: Sequence[float], beat_times: Sequence[float],
+                  tol: float = 0.14) -> List[float]:
+    """Pull each trigger to the nearest beat inside ``tol``; drop the rest —
+    when beat-sync is on, effects should land *on* the beat or not fire."""
+    if not beat_times:
+        return list(times)
+    out = []
+    for t in sorted(times):
+        k = int(np.searchsorted(beat_times, t))
+        cand = [b for b in beat_times[max(0, k - 1):k + 1] if abs(b - t) <= tol]
+        if cand:
+            out.append(min(cand, key=lambda b: abs(b - t)))
+    return sorted(set(out))
+
+
 # ------------------------------------------------------------------ builder
 
 def _smoothstep(t):
@@ -132,7 +179,8 @@ def _noise(n: int, fps: float, rng, freqs=(0.23, 0.41, 0.77, 1.13)) -> np.ndarra
 def build_motion(n: int, fps: float, m: MotionSettings, cuts: Sequence[Cut] = (),
                  shot_cuts: Sequence[int] = (), phrases: Sequence[Tuple[float, float]] = (),
                  words: Optional[Sequence] = None, pcm: Optional[np.ndarray] = None,
-                 seed: int = 0, skip: Sequence[Tuple[int, int]] = ()) -> MotionCurves:
+                 seed: int = 0, skip: Sequence[Tuple[int, int]] = (),
+                 beat_times: Sequence[float] = ()) -> MotionCurves:
     """Per-frame curves for ``n`` frames.
 
     ``cuts`` are all edit points (jump cuts + shot changes), ``shot_cuts`` the
@@ -175,8 +223,14 @@ def build_motion(n: int, fps: float, m: MotionSettings, cuts: Sequence[Cut] = ()
     def free(t: float) -> bool:
         return all(abs(t - u) >= m.min_gap for u in punctual)
 
+    def sync(trig: List[float]) -> List[float]:
+        if not (m.beat_sync and beat_times):
+            return trig
+        merged = list(trig) + list(beat_times)   # beats themselves trigger too
+        return _snap_to_beat(merged, beat_times)
+
     if m.crash:
-        trig = strong_words(words) or loud_peaks(pcm, min_gap=m.min_gap)
+        trig = sync(strong_words(words) or loud_peaks(pcm, min_gap=m.min_gap))
         top = 0.12 + 0.28 * m.crash_amount
         z = np.ones(n)
         att, hold, rel = max(2, fr(0.12)), fr(0.6), max(3, fr(0.3))
@@ -195,7 +249,7 @@ def build_motion(n: int, fps: float, m: MotionSettings, cuts: Sequence[Cut] = ()
     if m.shake:
         dur = fr(0.4)
         amp = 0.012 + 0.03 * m.shake_amount
-        for t in loud_peaks(pcm, min_gap=m.min_gap):
+        for t in sync(loud_peaks(pcm, min_gap=m.min_gap)):
             f = fr(t)
             if f >= n or hidden(f) or not free(t):
                 continue

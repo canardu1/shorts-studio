@@ -76,6 +76,8 @@ The honest trade-off: cloud tools offer web editors, team features and zero inst
 - **TikTok-style word-by-word** captions or classic lines — colour, position, uppercase
 - **Full styling** — any installed font, size, text/highlight colours, optional pill box, motion (fade, slide-up, pop-on-word)
 - **Style templates** — one-click caption looks (Default, Hormozi, Minimal, Cinematic) plus your own saved styles
+- **Auto-emoji** on keywords 🔥💰🤫 and **karaoke sweep** highlight — the OpusClip caption look, fully local
+- **Virality score** — every suggested clip gets a 🔥 score (hook, speech density, laughter, clean ending)
 - **Subtitle editor** — fix words, find & replace, timings re-spread automatically
 - **English translation** or **bilingual** captions
 
@@ -83,7 +85,7 @@ The honest trade-off: cloud tools offer web editors, team features and zero inst
 <td width="50%" valign="top">
 
 ### 🎥 Moves & image
-- **Punch-in** on every phrase · handheld drift · slow push-in · crash zoom · impact shake
+- **Punch-in** on every phrase · handheld drift · slow push-in · crash zoom · impact shake — **beat-synced** to your music track
 - **Transitions:** whip pan, zoom, glitch — **stabilisation** per shot
 - **Slow motion ×2/×4** — **RIFE** invents real in-between frames, or instant FFmpeg blend
 - **Face restoration:** GPEN-256/512, GFPGAN, CodeFormer

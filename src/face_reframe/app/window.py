@@ -830,6 +830,7 @@ class MainWindow(QMainWindow):
         W["mv_every"] = seg([(tr("Every cut"), "all"), (tr("Every other one"), "alternate"),
                              (tr("Only shot changes"), "shots")])
         W["mv_gap"] = dspin(0.5, 10, 0.5, 1.5, 1, " s")
+        W["beat_sync"] = QCheckBox(tr("Sync zooms/shake to the music beat"))
         f.addRow(section(tr("Camera moves")))
         f.addRow(W["mv_handheld"])
         f.addRow(tr("Strength"), W["mv_handheld_amount"])
@@ -843,7 +844,8 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Effect"), W["mv_transition"])
         f.addRow(tr("When"), W["mv_every"])
         f.addRow(tr("Min distance"), W["mv_gap"])
-        f.addRow(hint(tr("Crash zoom uses the transcript's strong words (questions, exclamations, numbers, “never”, “secret”…) or, without a transcript, voice peaks. Cuts are the shot changes and the pause cuts. Everything is previewed in play; export cost is nearly zero.")))
+        f.addRow(W["beat_sync"])
+        f.addRow(hint(tr("Crash zoom uses the transcript's strong words (questions, exclamations, numbers, “never”, “secret”…) or, without a transcript, voice peaks. Cuts are the shot changes and the pause cuts. Beat-sync snaps the effects onto the beats of your music track (or the video's own audio). Everything is previewed in play; export cost is nearly zero.")))
         tabs.addTab(self._page(f), tr("Effects"))
 
         # --- colour
@@ -947,9 +949,13 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Size"), W["caption_size"])
         f.addRow(tr("Text colour"), W["caption_color"])
         f.addRow(tr("Active word colour"), W["caption_hl"])
+        W["caption_sweep"] = QCheckBox(tr("Karaoke sweep (spoken words stay lit)"))
+        W["caption_emoji"] = QCheckBox(tr("Auto-emoji on keywords"))
         f.addRow(tr("Background box"), W["caption_box"])
         f.addRow(tr("Animation"), W["caption_anim"])
         f.addRow(W["caption_upper"])
+        f.addRow(W["caption_sweep"])
+        f.addRow(W["caption_emoji"])
         W["sub_lang"] = combo([(tr("Original language"), "orig"), (tr("English (translation)"), "en"),
                                (tr("Original + English below"), "both")])
         f.addRow(tr("Caption language"), W["sub_lang"])
@@ -1240,6 +1246,7 @@ class MainWindow(QMainWindow):
             subtitles=v("subtitles"), caption_style=v("caption_style"), language=v("language"),
             caption_words=int(v("caption_words")), caption_max_dur=v("caption_max_dur"),
             caption_pos=v("caption_pos"), caption_anim=v("caption_anim"),
+            caption_emoji=v("caption_emoji"), caption_sweep=v("caption_sweep"),
             person_by_file=dict(self.person_pick),
             motion=self.motion_settings(),
             manual_by_file={k: list(m) for k, m in self.manual.items() if m},
@@ -1359,7 +1366,8 @@ class MainWindow(QMainWindow):
             push=v("mv_push"), push_amount=v("mv_push_amount"),
             crash=v("mv_crash"), crash_amount=v("mv_crash_amount"),
             shake=v("mv_shake"), shake_amount=v("mv_shake_amount"),
-            transition=v("mv_transition"), transition_every=v("mv_every"), min_gap=v("mv_gap"))
+            transition=v("mv_transition"), transition_every=v("mv_every"), min_gap=v("mv_gap"),
+            beat_sync=v("beat_sync"))
 
     def _settings(self):
         return QSettings("face_reframe", "ShortsStudio")
@@ -1469,6 +1477,9 @@ class MainWindow(QMainWindow):
             self.w[k].setEnabled(v("subtitles") == "burn")
         self.caption_font.setEnabled(v("subtitles") == "burn")
         self.w["caption_hl"].setEnabled(v("subtitles") == "burn" and v("caption_style") == "word")
+        self.w["caption_sweep"].setEnabled(v("subtitles") == "burn" and v("caption_style") == "word")
+        self.w["caption_emoji"].setEnabled(v("subtitles") == "burn")
+        self.w["beat_sync"].setEnabled(v("mv_crash") or v("mv_shake"))
         self.w["punch_zoom"].setEnabled(v("punch"))
         for k in ("handheld", "push", "crash", "shake"):
             self.w["mv_%s_amount" % k].setEnabled(v("mv_" + k))
@@ -1491,6 +1502,22 @@ class MainWindow(QMainWindow):
         self.replan_timer.start()
         if self.play_timer.isActive() and self._pa_key_changed():
             self.pa_timer.start()
+
+    def _beat_pcm(self, pcm):
+        """Audio for beat detection: the music track when set (sync to the
+        song's beat), otherwise the video's own sound — decoded once, cached."""
+        src = self.music_path if self.music_path and os.path.exists(self.music_path) else None
+        if src is None:
+            return pcm
+        ent = getattr(self, "_beat_cache", (None, None))
+        if ent[0] != src:
+            try:
+                from ..silence import extract_audio
+                ent = (src, extract_audio(src))
+            except Exception:
+                ent = (src, pcm)
+            self._beat_cache = ent
+        return ent[1]
 
     # ---------------------------------------------------------- presets
     def _fill_presets(self):
@@ -1933,8 +1960,13 @@ class MainWindow(QMainWindow):
                 rem = [(int(round(a0 * fps)), int(round(b0 * fps))) for a0, b0 in self.removed]
                 edits = sorted([(c, c) for c in shot_cuts] + rem)
                 phrases = speech_intervals(pcm, s.speech) if pcm is not None else []
+                beat_times = []
+                if s.motion.beat_sync:
+                    from .motion import beats as detect_beats
+                    beat_times = detect_beats(self._beat_pcm(pcm))
                 self._motion = build_motion(a.frame_count, fps, s.motion, edits, shot_cuts, phrases,
-                                            words, pcm, seed=_seed(self.current), skip=rem)
+                                            words, pcm, seed=_seed(self.current), skip=rem,
+                                            beat_times=beat_times)
             if s.stabilize:
                 st = self._stab_for(a)
                 if st is not None:
@@ -2045,7 +2077,8 @@ class MainWindow(QMainWindow):
                 self._renderer = make_renderer(self._val("caption_color"), self._val("caption_upper"),
                                                self._val("caption_hl"), self._val("caption_size"),
                                                self.caption_font.currentFont().family(),
-                                               self._val("caption_box"))
+                                               self._val("caption_box"),
+                                               sweep=self._val("caption_sweep"))
             except Exception:
                 self._renderer = None
         return self._renderer
@@ -2776,7 +2809,9 @@ class MainWindow(QMainWindow):
         for k, h in enumerate(hls, 1 + n_existing):
             title = h.title if len(h.title) <= 38 else h.title[:36] + "…"
             self._add_item({"path": src["path"], "clip": (h.start, h.end), "stem": "%s_clip%d" % (base, k),
-                            "label": "   ↳ %s–%s  %s" % (_fmt(h.start), _fmt(h.end), title)},
+                            "score": min(99, int(round(h.score * 20))),
+                            "label": "   ↳ %s–%s  🔥%d  %s" % (_fmt(h.start), _fmt(h.end),
+                                                            min(99, int(round(h.score * 20))), title)},
                            row + k - n_existing)
         self._log(tr("Found %d moments in %s: they're in the list under the video") % (len(hls), src["label"]))
         self._update_count()
@@ -3511,7 +3546,8 @@ class MainWindow(QMainWindow):
             renderer = make_renderer(self._val("caption_color"), self._val("caption_upper"),
                                      self._val("caption_hl"), self._val("caption_size"),
                                      self.caption_font.currentFont().family(),
-                                     self._val("caption_box"))
+                                     self._val("caption_box"),
+                                     sweep=self._val("caption_sweep"))
         except Exception as exc:
             self._log(tr("Qt captions unavailable (%s), using OpenCV") % exc)
         for i in range(len(items)):

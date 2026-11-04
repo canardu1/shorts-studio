@@ -97,6 +97,10 @@ class JobSettings:
     """Caption motion: ``off`` | ``fade`` | ``slide`` (rise in) | ``pop``
     (scale pulse when the highlighted word changes). Typography (font, size,
     box) lives in the caption renderer, not here."""
+    caption_emoji: bool = False
+    """Auto-emoji: keywords in the caption draw their emoji next to it."""
+    caption_sweep: bool = False
+    """Karaoke sweep: spoken words stay highlighted (renderer option)."""
 
     person_by_file: Dict[str, List[np.ndarray]] = field(default_factory=dict)
     """Per-video "follow this person" picks (identity vectors), by abs path."""
@@ -417,8 +421,10 @@ def group_word_events(words, max_words: int = 3, max_dur: float = 1.6):
     return events
 
 
-def _cv_caption(words: Sequence[str], active: Optional[int], out_w: int) -> np.ndarray:
-    """Fallback caption renderer (no Qt): plain OpenCV text with outline."""
+def _cv_caption(words: Sequence[str], active: Optional[int], out_w: int,
+                emojis: Sequence[str] = ()) -> np.ndarray:
+    """Fallback caption renderer (no Qt): plain OpenCV text with outline.
+    Emoji are silently skipped — Hershey fonts can't draw them."""
     import cv2
     text = " ".join(words).upper()
     font, scale, thick = cv2.FONT_HERSHEY_DUPLEX, out_w / 600.0, max(2, out_w // 270)
@@ -456,7 +462,7 @@ class CaptionBurner:
 
     def __init__(self, events, fps: float, out_w: int, out_h: int,
                  renderer: Optional[CaptionRenderer], pos: float, style: str = "word",
-                 second_words=None, anim: str = "off"):
+                 second_words=None, anim: str = "off", emoji: bool = False):
         self.second_words = second_words
         """Words of a second language: their text under each caption, smaller."""
         self._second = {}
@@ -465,6 +471,7 @@ class CaptionBurner:
         self.fps, self.out_w, self.out_h = fps, out_w, out_h
         self.renderer = renderer or _cv_caption
         self.pos, self.style, self.anim = pos, style, anim
+        self.emoji = emoji
         self._key, self._img = None, None
 
     def image_at(self, t: float) -> Optional[np.ndarray]:
@@ -481,7 +488,11 @@ class CaptionBurner:
         key = (k, active)
         if key != self._key:
             texts = [w.text.strip() for w in grp]
-            self._img, self._key = self.renderer(texts, active, self.out_w), key
+            emojis = ()
+            if self.emoji:
+                from .emoji import for_words
+                emojis = for_words(texts)
+            self._img, self._key = self.renderer(texts, active, self.out_w, emojis), key
         return self._img
 
     def _second_img(self, k: int):
@@ -940,12 +951,21 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                     log(tr("  split screen on %d frames") % int(split.mask.sum()))
             curves = None
             if moves is not None:
-                from ..silence import speech_intervals
-                from .motion import build_motion, output_cuts
+                from ..silence import extract_audio, speech_intervals
+                from .motion import beats as detect_beats, build_motion, output_cuts
                 cuts, shot_cuts = output_cuts(spans, res.path.segments, fps)
                 phrases = speech_intervals(pcm, s.speech) if pcm is not None else []
+                beat_times = []
+                if moves.beat_sync:
+                    bpcm = pcm
+                    if s.music_path and os.path.exists(s.music_path):
+                        try:
+                            bpcm = extract_audio(s.music_path)
+                        except Exception:
+                            bpcm = pcm
+                    beat_times = detect_beats(bpcm)
                 curves = build_motion(analysis.frame_count, fps, moves, cuts, shot_cuts, phrases,
-                                      words, pcm, seed=_seed(src))
+                                      words, pcm, seed=_seed(src), beat_times=beat_times)
                 if aspect == aspects[0]:
                     log(tr("  moves: %d cuts") % len(cuts))
             if stab is not None:
@@ -962,7 +982,8 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                 # split screen: captions sit on the seam, off both faces
                 burner = CaptionBurner(events, fps, out_w, out_h, caption_renderer,
                                        0.5 if split is not None else s.caption_pos, s.caption_style,
-                                       second_words=second, anim=s.caption_anim)
+                                       second_words=second, anim=s.caption_anim,
+                                       emoji=s.caption_emoji)
             hooks = []
             if s.bg_blur > 0 or s.bg_fill not in ("blur", "off"):
                 from .rvm import build as build_bg_blur

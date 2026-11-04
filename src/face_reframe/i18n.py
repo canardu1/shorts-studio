@@ -746,4 +746,9 @@ _IT = {
     "Cut %s to end": "Taglia da %s alla fine",
     "to end": "alla fine",
     "blade": "lama",
+    "Karaoke sweep (spoken words stay lit)": "Sweep karaoke (le parole dette restano accese)",
+    "Auto-emoji on keywords": "Emoji automatiche sulle parole chiave",
+    "Sync zooms/shake to the music beat": "Sincronizza zoom/scosse al tempo della musica",
+    "Crash zoom uses the transcript's strong words (questions, exclamations, numbers, “never”, “secret”…) or, without a transcript, voice peaks. Cuts are the shot changes and the pause cuts. Beat-sync snaps the effects onto the beats of your music track (or the video's own audio). Everything is previewed in play; export cost is nearly zero.":
+        "Il crash zoom usa le parole forti della trascrizione (domande, esclamazioni, numeri, “mai”, “segreto”…) o, senza trascrizione, i picchi vocali. I tagli sono i cambi scena e i tagli delle pause. Beat-sync aggancia gli effetti ai beat della traccia musicale (o dell'audio del video). Tutto in anteprima live; costo export quasi nullo.",
 }

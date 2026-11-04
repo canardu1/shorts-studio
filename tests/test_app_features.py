@@ -99,7 +99,8 @@ def test_word_captions_highlight_active_word():
     ev = group_word_events(words, 3, 1.6)
     assert [len(e[2]) for e in ev] == [3, 1]
     seen = []
-    burn = CaptionBurner(ev, 25.0, 360, 640, lambda w, a, ow: (seen.append(a), _cv_caption(w, a, ow))[1], 0.7)
+    burn = CaptionBurner(ev, 25.0, 360, 640,
+                         lambda w, a, ow, em=(): (seen.append(a), _cv_caption(w, a, ow))[1], 0.7)
     for i in (2, 12, 22):
         burn(i, np.zeros((640, 360, 3), np.uint8))
     assert seen == [0, 1, 2]

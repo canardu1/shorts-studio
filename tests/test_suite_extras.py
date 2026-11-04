@@ -69,7 +69,7 @@ def test_caption_animations():
     from face_reframe.app.jobs import CaptionBurner
     from face_reframe.transcribe import Word
 
-    def renderer(words, active, out_w):            # fake: solid white 40x8 px
+    def renderer(words, active, out_w, emojis=()):  # fake: solid white 40x8 px
         return np.full((8, 40, 4), (255, 255, 255, 255), np.uint8)
 
     fps, W, H = 25.0, 360, 640
@@ -152,6 +152,28 @@ def test_look_tables():
     assert np.abs(half - img).mean() < np.abs(full - img).mean()
     wb = look.apply(img, look.Look("none", 1.0, (1.2, 1.0, 0.8))).astype(int)
     assert wb[..., 2].mean() > img[..., 2].mean()
+
+
+def test_auto_emoji_and_beats():
+    from face_reframe.app.emoji import for_words
+    from face_reframe.app import motion
+    assert for_words(["I", "love", "this", "secret"]) == ["❤️", "🤫"]
+    assert for_words(["soldi", "gratis"]) == ["💰", "🆓"]
+    assert for_words(["hello", "there"]) == []
+    assert len(for_words(["money", "fire", "love", "top"])) == 2  # cap at 2
+    sr = 16000
+    pcm = np.zeros(8 * sr, np.float32)
+    for b in np.arange(0.5, 8, 0.5):       # clicks on a strict 0.5 s grid
+        i = int(b * sr)
+        pcm[i:i + 200] += np.sin(2 * np.pi * 120 * np.arange(200) / sr) * 0.8
+    bs = motion.beats(pcm, sr)
+    assert len(bs) >= 10
+    assert all(min(abs(b - t) for t in np.arange(0.5, 8, 0.5)) < 0.12 for b in bs)
+    # beat-sync: triggers snap to the nearest detected beat, unmatched drop
+    snapped = motion._snap_to_beat([0.45, 1.1, 1.52], bs, tol=0.15)
+    assert snapped == [bs[0], bs[2]], snapped   # 1.1 s has no beat within tol
+    flat = np.zeros(4 * sr, np.float32)
+    assert motion.beats(flat, sr) == []
 
 
 def test_cube_lut(tmp_path):

@@ -11,11 +11,15 @@ from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter, QPaint
 
 
 def make_renderer(color: str = "#FFFFFF", uppercase: bool = True, highlight: str = "#FFD400",
-                  size_frac: float = 0.075, family: str = "Arial Black", box: str = "none"):
-    """Returns ``(words, active_index, out_w) -> BGRA ndarray``; safe to call
-    from a worker thread (QImage painting doesn't need the GUI thread)."""
+                  size_frac: float = 0.075, family: str = "Arial Black", box: str = "none",
+                  sweep: bool = False):
+    """Returns ``(words, active_index, out_w, emojis=()) -> BGRA ndarray``; safe
+    to call from a worker thread (QImage painting doesn't need the GUI thread).
+    ``sweep`` is the karaoke look: every word already spoken stays highlighted.
+    ``emojis`` are drawn after the text via font fallback (colour on macOS)."""
 
-    def render(words: Sequence[str], active: Optional[int], out_w: int) -> np.ndarray:
+    def render(words: Sequence[str], active: Optional[int], out_w: int,
+               emojis: Sequence[str] = ()) -> np.ndarray:
         toks = [(w.upper() if uppercase else w).strip() for w in words]
         text = " ".join(toks)
         font = QFont(family)
@@ -30,7 +34,8 @@ def make_renderer(color: str = "#FFFFFF", uppercase: bool = True, highlight: str
         pad = int(stroke * 2) if box == "none" else int(font.pixelSize() * 0.42)
         # the active word pops a little: leave room for it
         pop = 1.12 if active is not None else 1.0
-        w = int(fm.horizontalAdvance(text) * pop) + 2 * pad
+        em_w = int(len(emojis) * font.pixelSize() * 1.25)
+        w = int(fm.horizontalAdvance(text) * pop) + 2 * pad + em_w
         h = int(fm.height() * pop) + 2 * pad
         img = QImage(w, h, QImage.Format_RGBA8888)
         img.fill(Qt.transparent)
@@ -54,9 +59,16 @@ def make_renderer(color: str = "#FFFFFF", uppercase: bool = True, highlight: str
             p.setBrush(Qt.NoBrush)
             p.drawPath(path)
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor(highlight if k == active else color))
+            lit = k == active or (sweep and active is not None and k < active)
+            p.setBrush(QColor(highlight if lit else color))
             p.drawPath(path)
             x += QFontMetricsF(f).horizontalAdvance(tok) + space
+        if emojis:
+            p.setFont(font)
+            p.setPen(QColor("#FFFFFF"))
+            for e in emojis:
+                p.drawText(QPointF(x, base), e)
+                x += font.pixelSize() * 1.25
         p.end()
         arr = np.frombuffer(img.constBits(), np.uint8, count=img.sizeInBytes())
         arr = arr.reshape(h, img.bytesPerLine() // 4, 4)[:, :w]
