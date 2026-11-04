@@ -153,7 +153,8 @@ class Card:
     Cover-fitted to the output size; cross-fades with the video at the edges,
     fully replaces the frame in between. The audio keeps running."""
 
-    def __init__(self, path: str, a: int, b: int, out_w: int, out_h: int, fade: int = 8):
+    def __init__(self, path: str, a: int, b: int, out_w: int, out_h: int, fade: int = 8,
+                 end: Optional[int] = None):
         import cv2
         img = cv2.imread(path)
         if img is None:
@@ -165,11 +166,16 @@ class Card:
         y0 = max(0, (img.shape[0] - out_h) // 2)
         self.img = img[y0:y0 + out_h, x0:x0 + out_w]
         self.a, self.b, self.fade = a, b, max(1, fade)
+        self.end = end
 
     def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
         if not (self.a <= i < self.b):
             return frame
-        k = min(1.0, (i - self.a + 1) / self.fade, (self.b - i) / self.fade)
+        # no fade-in at frame 0 / no fade-out on the last frame: feeds show the
+        # first/last frame as a still, and a half-faded card there reads as a bug
+        k_in = 1.0 if self.a == 0 else (i - self.a + 1) / self.fade
+        k_out = 1.0 if (self.end is not None and self.b >= self.end) else (self.b - i) / self.fade
+        k = min(1.0, k_in, k_out)
         if k >= 1.0:
             return self.img.copy()
         import cv2
@@ -213,7 +219,7 @@ def build(o: OverlaySettings, hook_text: str, n: int, fps: float, out_w: int, ou
         if path and os.path.exists(path):
             a = a0 if a0 is not None else max(0, n - int(dur * fps))
             try:
-                parts.append(Card(path, a, min(n, a + int(dur * fps)), out_w, out_h))
+                parts.append(Card(path, a, min(n, a + int(dur * fps)), out_w, out_h, end=n))
             except IOError as exc:
                 log("  %s" % exc)
     return parts

@@ -130,12 +130,16 @@ class CutDetector:
         self._gray = None
         self._diffs: List[float] = []
 
-    def __call__(self, image: np.ndarray) -> bool:
+    def _feats(self, image: np.ndarray):
         small = cv2.resize(image, (160, 90), interpolation=cv2.INTER_AREA)
         hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
         hist = cv2.calcHist([hsv], [0, 1], None, [16, 8], [0, 180, 0, 256])
         hist = cv2.normalize(hist, hist).flatten()
         gray = cv2.GaussianBlur(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), (5, 5), 0).astype(np.float32)
+        return hist, gray
+
+    def __call__(self, image: np.ndarray) -> bool:
+        hist, gray = self._feats(image)
         cut = False
         if self._hist is not None:
             hist_diff = cv2.compareHist(self._hist, hist, cv2.HISTCMP_BHATTACHARYYA)
@@ -147,6 +151,33 @@ class CutDetector:
             self._diffs = [] if cut else (self._diffs + [changed])[-25:]
         self._hist, self._gray = hist, gray
         return cut
+
+    def state(self):
+        """Feature state of the last frame fed — the seed for ``locate``."""
+        return self._hist, self._gray
+
+    def locate(self, frames, hist, gray) -> Optional[int]:
+        """Replay consecutive ``frames`` seeded by ``state()`` and return the
+        index of the first real cut inside, or ``None``.
+
+        Used when detection runs on sampled frames only: a fire means a cut
+        happened somewhere in the skipped gap, and rescanning the buffered
+        frames pins the exact boundary. A fire that matches no consecutive
+        pair was a stride-spaced false positive (fast pan, fade) — a hard cut
+        always trips on adjacent frames."""
+        diffs = list(self._diffs)
+        for k, img in enumerate(frames):
+            h, g = self._feats(img)
+            if hist is not None:
+                d = cv2.compareHist(hist, h, cv2.HISTCMP_BHATTACHARYYA)
+                ch = float(np.mean(np.abs(g - gray) > 20))
+                typ = float(np.median(diffs)) if diffs else 0.0
+                if d > self.hist_threshold or (
+                        ch > self.change_threshold and ch > self.change_ratio * max(typ, 0.01)):
+                    return k
+                diffs = (diffs + [ch])[-25:]
+            hist, gray = h, g
+        return None
 
 
 def _roi_motion(gray: np.ndarray, prev: np.ndarray, x0: float, y0: float, x1: float, y1: float,
@@ -346,36 +377,57 @@ def analyze_video(
     embed_every = max(1, int(round(0.5 * fps / max(1, stride))))
     is_cut = CutDetector(hist_threshold=cut_threshold)
     samples: List[FrameSample] = []
-    pending_cut = False
+    buf: List[np.ndarray] = []       # frames skipped since the last sample
     prev_gray = None
     prev_faces: List[Face] = []
     n = 0
+
+    def _take_sample(idx: int, frame: np.ndarray, cut: bool):
+        nonlocal prev_gray, prev_faces
+        faces = detector.detect(frame)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        for f in faces:
+            f.sig = appearance(frame, f)
+        if embedder.available and (cut or len(samples) % embed_every == 0):
+            for f in faces:
+                f.emb = embedder(frame, f)
+        if prev_gray is not None and not cut:
+            for f in faces:
+                f.mouth = mouth_activity(f, gray, prev_gray, _same_face(f, prev_faces))
+        prev_faces = faces
+        smp = FrameSample(idx, faces, cut=cut)
+        if not faces and saliency is not None:
+            try:
+                smp.salient = saliency(frame)
+            except Exception:
+                smp.salient = None
+        samples.append(smp)
+        prev_gray = gray
+
     try:
         for i, frame in enumerate(iter_frames(cap, start_frame, frame_count)):
             n = i + 1
-            if is_cut(frame):
-                pending_cut = True
-            if i % stride == 0 or pending_cut:
-                faces = detector.detect(frame)
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                for f in faces:
-                    f.sig = appearance(frame, f)
-                if embedder.available and (pending_cut or len(samples) % embed_every == 0):
-                    for f in faces:
-                        f.emb = embedder(frame, f)
-                if prev_gray is not None and not pending_cut:
-                    for f in faces:
-                        f.mouth = mouth_activity(f, gray, prev_gray, _same_face(f, prev_faces))
-                prev_faces = faces
-                smp = FrameSample(i, faces, cut=pending_cut)
-                if not faces and saliency is not None:
-                    try:
-                        smp.salient = saliency(frame)
-                    except Exception:
-                        smp.salient = None
-                samples.append(smp)
-                prev_gray = gray
-                pending_cut = False
+            if i % stride == 0:
+                # cut detection on sampled frames only (its downscale+hist was
+                # ~40% of the pump). A fire means the boundary sits somewhere in
+                # the gap since the last sample: rescan the buffered frames to
+                # pin it exactly, and sample that frame so the first frame of a
+                # new shot always carries a real detection. A fire matching no
+                # consecutive pair is a stride-spaced false positive — dropped.
+                seed_h, seed_g = is_cut.state()
+                cut = is_cut(frame)
+                if cut and buf:
+                    j = is_cut.locate(buf + [frame], seed_h, seed_g)
+                    if j is None:
+                        cut = False
+                    elif j < len(buf):
+                        _take_sample(i - len(buf) + j, buf[j], True)
+                        cut = False      # the boundary sample carries the flag
+                    # j == len(buf): the boundary is this frame itself
+                _take_sample(i, frame, cut)
+                buf = []
+            else:
+                buf.append(frame)
             if progress and frame_count < 10**9 and i % 25 == 0:
                 progress(min(1.0, i / float(frame_count)))
     finally:

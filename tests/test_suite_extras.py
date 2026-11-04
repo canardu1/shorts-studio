@@ -58,6 +58,9 @@ def test_overlays_progress_and_cards(tmp_path):
     assert first[..., 2].mean() > 200          # intro card covers the frame early on
     assert mid[..., 2].mean() < 20             # ...but not in the middle
     assert last[..., 2].mean() > 200           # outro card covers the end
+    # edge frames hold the card at full opacity: feeds stills show it properly
+    assert chain(0, blank.copy())[..., 2].mean() > 200
+    assert chain(99, blank.copy())[..., 2].mean() > 200
     # progress bar: the accent-coloured bar on the bottom edge grows with time
     early = chain(30, blank.copy())[636:, :, 2].sum()
     late = chain(60, blank.copy())[636:, :, 2].sum()
@@ -136,7 +139,42 @@ def test_fill_background_modes(tmp_path):
     assert a.shape == (100, 200, 3) and not np.array_equal(a, b)
     vf(2, frame)                                              # backward jump -> seek, no crash
 
+    vf = rvm.VideoFill(str(tmp_path / "bg.mp4"), 200, 100, 25.0)
+    vf.rate = 0.5                                             # bg slower than out: repeats
+    class SpyCap:
+        def __init__(self, cap):
+            self._cap, self.seeks = cap, 0
+        def set(self, prop, val):
+            self.seeks += 1
+            return self._cap.set(prop, val)
+        def __getattr__(self, name):
+            return getattr(self._cap, name)
+    vf.cap = SpyCap(vf.cap)
+    for i in range(6):
+        vf(i, frame)
+    assert vf.cap.seeks == 0    # repeated indices reuse the frame — no seeks
+
     assert rvm.make_fill("blur", 200, 100) is None            # blur mode -> no fill provider
+
+
+def test_cut_detector_locate():
+    from face_reframe.detect import CutDetector
+    a = np.full((1080, 1920, 3), (60, 90, 120), np.uint8)
+    b = np.full((1080, 1920, 3), (160, 40, 40), np.uint8)
+    det = CutDetector()
+    det(a)                                    # state at the last sampled frame
+    seed = det.state()
+    assert det(b)                             # the stride-spaced fire
+    assert det.locate([b], *seed) == 0        # boundary is the first gap frame
+    det2 = CutDetector()
+    det2(a)
+    seed2 = det2.state()
+    det2(b)                                   # fire again at the next sample
+    assert det2.locate([a, a, b], *seed2) == 2     # boundary pinned mid-gap
+    det3 = CutDetector()
+    det3(a)
+    s3 = det3.state()
+    assert not det3(a) and det3.locate([a, a], *s3) is None   # no cut -> None
 
 
 def test_look_tables():

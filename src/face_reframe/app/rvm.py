@@ -230,9 +230,11 @@ class ImageFill:
 class VideoFill:
     """Looping background video, decoded per frame.
 
-    Source fps is honoured (``rate``), playback loops; when the frame index
-    jumps (preview scrubs or a new render pass) it seeks instead of reading
-    sequentially."""
+    Source fps is honoured (``rate``), playback loops. Reads are strictly
+    sequential: a repeated index (background slower than the output) reuses
+    the last decoded frame instead of seeking, and only an actual jump
+    (preview scrubs, a new render pass, the loop wrap) seeks at all — on a
+    long-GOP source every seek costs a re-decode from the previous keyframe."""
 
     def __init__(self, path: str, out_w: int, out_h: int, fps: float = 25.0):
         import cv2
@@ -243,20 +245,23 @@ class VideoFill:
         self.n = max(1, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1)
         self.rate = (self.cap.get(cv2.CAP_PROP_FPS) or 25.0) / fps
         self._last = -1
+        self._img: Optional[np.ndarray] = None
 
     def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
         import cv2
-        src_i = int(i * self.rate)
-        if src_i != self._last + 1:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, src_i % self.n)
+        src_i = int(i * self.rate) % self.n
+        if src_i == self._last and self._img is not None:
+            return self._img
+        if src_i != (self._last + 1) % self.n:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, src_i)
         ok, img = self.cap.read()
-        if not ok:  # loop
+        if not ok:  # loop wrap or corrupt tail
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             ok, img = self.cap.read()
         self._last = src_i
-        if not ok:
-            return np.zeros((self.out_h, self.out_w, 3), np.uint8)
-        return _cover(img, self.out_w, self.out_h)
+        self._img = _cover(img, self.out_w, self.out_h) if ok \
+            else np.zeros((self.out_h, self.out_w, 3), np.uint8)
+        return self._img
 
 
 def make_fill(mode: str, out_w: int, out_h: int, fps: float = 25.0,

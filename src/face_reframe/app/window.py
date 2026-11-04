@@ -2008,7 +2008,8 @@ class MainWindow(QMainWindow):
             parts.append(CaptionBurner(group_word_events(cap_words, s.caption_words, s.caption_max_dur),
                                        fps, ow, oh, self._caption_renderer(),
                                        0.5 if self._split is not None else s.caption_pos,
-                                       s.caption_style, second_words=second, anim=s.caption_anim))
+                                       s.caption_style, second_words=second, anim=s.caption_anim,
+                                       emoji=s.caption_emoji))
         ov = s.overlays
         if ov is not None:
             from .overlays import build as build_overlays, first_sentence

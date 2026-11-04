@@ -18,9 +18,9 @@ def test_cli_keeps_face_centred(tmp_path):
     assert main([src, "-o", out, "--json", track]) == 0
     with open(track) as fh:
         data = json.load(fh)
-    # cut detection runs on sampled frames, so the boundary may land on the
-    # next sample (75 -> 76 at stride 2); the camera still cuts hard there
-    assert len(data["cuts"]) == 1 and abs(data["cuts"][0] - 75) <= 1
+    # sampled cut detection rescans the buffered gap and pins the exact
+    # boundary frame — no drift at stride 2
+    assert data["cuts"] == [75]
     assert len(data["frames"]) == 150
 
     cap = cv2.VideoCapture(out)
@@ -48,9 +48,9 @@ def test_cli_zooms_wide_shot(tmp_path):
     assert main([src, "-o", out, "--json", track]) == 0
     with open(track) as fh:
         data = json.load(fh)
-    # cut detection runs on sampled frames, so the boundary may land on the
-    # next sample (75 -> 76 at stride 2); the camera still cuts hard there
-    assert len(data["cuts"]) == 1 and abs(data["cuts"][0] - 75) <= 1
+    # sampled cut detection rescans the buffered gap and pins the exact
+    # boundary frame — no drift at stride 2
+    assert data["cuts"] == [75]
     kinds = [s["kind"] for s in data["shots"]]
     assert kinds == ["close", "wide"], data["shots"]
     assert data["shots"][0]["zoom"] == 1.0 and data["shots"][1]["zoom"] > 1.5
