@@ -1111,6 +1111,7 @@ class MainWindow(QMainWindow):
             b.setIconSize(QSize(19, 19))
             b.setText(tr(name))
             b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            b.setFixedWidth(62)
             b.clicked.connect(lambda _c, i=i: tabs.setCurrentIndex(i))
             lay.addWidget(b)
             self._rail_btns.append(b)
