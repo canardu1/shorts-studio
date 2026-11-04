@@ -48,6 +48,17 @@ def test_speaker_mode_ignores_short_interjections():
     assert len(path.segments) == 1
 
 
+def test_speaker_mode_voice_segments_no_crash():
+    # ECAPA voice tags drive the cut; mouth activity picks which face owns
+    # each voice. Regression: the scorer read ``f.mouth`` on the frame
+    # number (an int) and crashed whenever two people had mouth data.
+    an = _two_people(lambda f: f < 150)
+    voice = [(0.0, 6.0, 0), (6.0, 12.0, 1)]
+    path = build_camera_path(an, TrackSettings(subject="speaker", voice=voice))
+    assert len(path.segments) == 2          # one cut where the voice changes
+    assert 130 <= path.segments[1][0] <= 175
+
+
 def test_main_mode_unchanged_by_mouths():
     an = _two_people(lambda f: f < 150)
     path = build_camera_path(an, TrackSettings(subject="main"))

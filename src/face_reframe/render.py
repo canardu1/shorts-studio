@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 from typing import Callable, Optional, Tuple
 
 import cv2
@@ -43,7 +44,8 @@ def render(
         video_args or ["-c:v", "libx264", "-crf", str(crf), "-preset", preset]) + [
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest", out_path,
     ]
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    err = tempfile.TemporaryFile()
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=err)
     cap = cv2.VideoCapture(video)
     try:
         for i, frame in enumerate(iter_frames(cap, start_frame, n)):
@@ -62,15 +64,23 @@ def render(
             if debug_overlay is not None:
                 fx = int(round((debug_overlay[i] - x) * out_w / float(w)))  # tracked face x
                 cv2.line(out, (fx, 0), (fx, out_h), (0, 255, 0), 2)
-            proc.stdin.write(out.tobytes())
+            try:
+                proc.stdin.write(out.tobytes())
+            except BrokenPipeError:
+                break  # ffmpeg died early; the exit code carries the real error
             if progress and i % 25 == 0:
                 progress(i / float(n))
     finally:
         cap.release()
-        proc.stdin.close()
+        try:
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass
         code = proc.wait()
     if code != 0:
-        raise RuntimeError("ffmpeg failed with exit code %d" % code)
+        err.seek(0)
+        detail = err.read().decode("utf-8", "replace").strip()
+        raise RuntimeError("ffmpeg failed with exit code %d%s" % (code, ": " + detail[-400:] if detail else ""))
     if progress:
         progress(1.0)
     return out_path

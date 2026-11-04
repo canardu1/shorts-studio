@@ -284,7 +284,7 @@ def _speaker_pieces(samples, frame_w: float, fps: float, hold_s: float,
         for va, vb, lab in segs:
             best, best_act = cur, 0.0
             for tr in tracks:
-                act = sum(f.mouth or 0.0 for f, face in tr
+                act = sum(face.mouth or 0.0 for f, face in tr
                           if va * fps <= f <= vb * fps)
                 if act > best_act:
                     best, best_act = tr, act

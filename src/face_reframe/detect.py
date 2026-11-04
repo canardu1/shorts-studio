@@ -350,34 +350,36 @@ def analyze_video(
     prev_gray = None
     prev_faces: List[Face] = []
     n = 0
-    for i, frame in enumerate(iter_frames(cap, start_frame, frame_count)):
-        n = i + 1
-        if is_cut(frame):
-            pending_cut = True
-        if i % stride == 0 or pending_cut:
-            faces = detector.detect(frame)
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            for f in faces:
-                f.sig = appearance(frame, f)
-            if embedder.available and (pending_cut or len(samples) % embed_every == 0):
+    try:
+        for i, frame in enumerate(iter_frames(cap, start_frame, frame_count)):
+            n = i + 1
+            if is_cut(frame):
+                pending_cut = True
+            if i % stride == 0 or pending_cut:
+                faces = detector.detect(frame)
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 for f in faces:
-                    f.emb = embedder(frame, f)
-            if prev_gray is not None and not pending_cut:
-                for f in faces:
-                    f.mouth = mouth_activity(f, gray, prev_gray, _same_face(f, prev_faces))
-            prev_faces = faces
-            smp = FrameSample(i, faces, cut=pending_cut)
-            if not faces and saliency is not None:
-                try:
-                    smp.salient = saliency(frame)
-                except Exception:
-                    smp.salient = None
-            samples.append(smp)
-            prev_gray = gray
-            pending_cut = False
-        if progress and frame_count < 10**9 and i % 25 == 0:
-            progress(min(1.0, i / float(frame_count)))
-    cap.release()
+                    f.sig = appearance(frame, f)
+                if embedder.available and (pending_cut or len(samples) % embed_every == 0):
+                    for f in faces:
+                        f.emb = embedder(frame, f)
+                if prev_gray is not None and not pending_cut:
+                    for f in faces:
+                        f.mouth = mouth_activity(f, gray, prev_gray, _same_face(f, prev_faces))
+                prev_faces = faces
+                smp = FrameSample(i, faces, cut=pending_cut)
+                if not faces and saliency is not None:
+                    try:
+                        smp.salient = saliency(frame)
+                    except Exception:
+                        smp.salient = None
+                samples.append(smp)
+                prev_gray = gray
+                pending_cut = False
+            if progress and frame_count < 10**9 and i % 25 == 0:
+                progress(min(1.0, i / float(frame_count)))
+    finally:
+        cap.release()
     if progress:
         progress(1.0)
     res = Analysis(width, height, fps, start_frame, n, samples)

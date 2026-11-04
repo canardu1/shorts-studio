@@ -16,8 +16,8 @@ def crop_box(plan, i: int, zoom: float = 1.0, dx: float = 0.0, dy: float = 0.0) 
     and shifted by (dx, dy) fractions of the crop size (camera moves)."""
     if zoom <= 1.0001 and dx == 0.0 and dy == 0.0:
         return plan.box(i)
-    w = int(round(plan.crop_w[i] / max(1.0, zoom)))
-    h = int(round(plan.crop_h[i] / max(1.0, zoom)))
+    w = max(1, int(round(plan.crop_w[i] / max(1.0, zoom))))
+    h = max(1, int(round(plan.crop_h[i] / max(1.0, zoom))))
     x = int(round(plan.cx[i] + dx * plan.crop_w[i] - w / 2.0))
     y = int(round(plan.cy[i] + dy * plan.crop_h[i] - h / 2.0))
     x = max(0, min(plan.src_w - w, x))
