@@ -39,6 +39,10 @@ class Timeline(QWidget):
         self.clip: Optional[Tuple[int, int]] = None
         self.words = False
         self.pos = 0
+        self.blade: Optional[float] = None
+        """Pending blade mark in seconds — orange line; a second B cuts blade->playhead."""
+        self.snaps: List[float] = []
+        """Snap targets in seconds (shot cuts, markers, events, clip edges)."""
 
     def set_data(self, n: int, fps: float, removed=None, cuts=(), manual=(), clip=None,
                  words=False, events=(), mcuts=None):
@@ -47,6 +51,10 @@ class Timeline(QWidget):
         self.mcuts = list(mcuts or [])
         self.cuts, self.manual, self.clip, self.words = list(cuts), list(manual), clip, words
         self.events = list(events)
+        pts = [c / self.fps for c in self.cuts] + [m / self.fps for m in self.manual] + list(self.events)
+        if self.clip is not None:
+            pts += [self.clip[0] / self.fps, self.clip[1] / self.fps]
+        self.snaps = sorted(set(pts))
         self.update()
 
     def set_pos(self, f: int):
@@ -94,6 +102,12 @@ class Timeline(QWidget):
         for t in self.events:
             x = self._x(t * self.fps)
             p.drawEllipse(QPointF(x, 25), 2.4, 2.4)
+        if self.blade is not None:
+            x = self._x(self.blade * self.fps)
+            pen = QPen(QColor("#e5a00a"), 2)
+            pen.setCapStyle(Qt.RoundCap)
+            p.setPen(pen)
+            p.drawLine(QPointF(x, 2), QPointF(x, h - 2))
         x = self._x(self.pos)
         pen = QPen(QColor("#ffffff"), 2)
         pen.setCapStyle(Qt.RoundCap)
@@ -102,7 +116,13 @@ class Timeline(QWidget):
 
     def _t(self, ev) -> float:
         f = (ev.position().x() - 6) / max(1.0, self.width() - 12) * self.n
-        return max(0.0, min(self.n - 1, f)) / self.fps
+        t = max(0.0, min(self.n - 1, f)) / self.fps
+        if self.snaps:
+            thr = 6.0 * self.n / max(1.0, self.width() - 12) / self.fps   # ~6 px
+            near = min(self.snaps, key=lambda s: abs(s - t))
+            if abs(near - t) <= thr:
+                t = near
+        return t
 
     def _emit(self, ev):
         self.seek.emit(int(self._t(ev) * self.fps))

@@ -118,6 +118,8 @@ class JobSettings:
     auto_wb: bool = False
     grade: object = None
     """:class:`look.Grade` manual grading (temperature, exposure, contrast…), or None."""
+    lut_path: Optional[str] = None
+    """Custom .cube LUT — used when ``look == "cube"``."""
     lowlight: str = "off"
     """Neural low-light lift: ``off`` | ``sg_llie`` (fast) | ``uretinex``."""
     lowlight_strength: float = 0.6
@@ -885,9 +887,14 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         look_obj = None
         grade_on = s.grade is not None and (s.grade.active or s.grade.vignette > 0)
         if s.look != "none" or s.auto_wb or grade_on:
-            from .look import Look, auto_gains
+            from .look import Look, auto_gains, load_cube
             gains = auto_gains(cur) if s.auto_wb else None
-            look_obj = Look(s.look, s.look_strength, gains, s.grade)
+            cube = None
+            if s.look == "cube":
+                cube = load_cube(s.lut_path or "")
+                if cube is None:
+                    log(tr("  LUT file unreadable or missing: keeping colours unchanged"))
+            look_obj = Look(s.look, s.look_strength, gains, s.grade, cube)
             log(tr("Colour: look %s%s%s") % (s.look, tr(", auto balance") if gains else "",
                                            tr(", grade") if grade_on else ""))
         stab = None

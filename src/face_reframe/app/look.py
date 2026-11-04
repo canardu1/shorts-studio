@@ -3,13 +3,82 @@ transform per video (64^3 offset table, like the skin correction)."""
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
 
 LOOKS = [("Natural", "none"), ("Warm", "warm"), ("Cool", "cool"), ("Cinematic (teal & orange)", "cine"),
-         ("Pop (contrast & colour)", "pop"), ("Vintage", "vintage"), ("B&W", "bw")]
+         ("Pop (contrast & colour)", "pop"), ("Vintage", "vintage"), ("B&W", "bw"),
+         ("Custom .cube file…", "cube")]
+
+
+def parse_cube(path: str) -> Optional[np.ndarray]:
+    """Parse an Adobe .cube 3D LUT -> float32 (n, n, n, 3) indexed [b, g, r]
+    (red varies fastest in the file). DOMAIN_MIN/MAX rescale inputs;
+    1D LUTs and malformed files return None."""
+    size, rows = 0, []
+    lo, hi = np.zeros(3, np.float32), np.ones(3, np.float32)
+    try:
+        with open(path, "r", errors="replace") as fh:
+            for line in fh:
+                s = line.strip()
+                if not s or s.startswith(("#", "TITLE", "LUT_1D", "COMMENT")):
+                    continue
+                if s.startswith("LUT_3D_SIZE"):
+                    size = int(s.split()[-1])
+                elif s.startswith("DOMAIN_MIN"):
+                    lo = np.array([float(x) for x in s.split()[1:4]], np.float32)
+                elif s.startswith("DOMAIN_MAX"):
+                    hi = np.array([float(x) for x in s.split()[1:4]], np.float32)
+                else:
+                    try:
+                        v = [float(x) for x in s.split()[:3]]
+                    except ValueError:
+                        continue
+                    if len(v) == 3:
+                        rows.append(v)
+    except (OSError, ValueError):
+        return None
+    if not size or len(rows) < size ** 3:
+        return None
+    cube = np.array(rows[: size ** 3], np.float32).reshape(size, size, size, 3)
+    return cube, lo, hi
+
+
+def _cube_apply(x: np.ndarray, lut) -> np.ndarray:
+    """Trilinear-interpolated .cube lookup on RGB float 0-1."""
+    cube, lo, hi = lut
+    n = cube.shape[0]
+    c = np.clip((x - lo) / np.maximum(hi - lo, 1e-6), 0.0, 1.0) * (n - 1)
+    lo_i = np.floor(c).astype(np.int32)
+    hi_i = np.minimum(lo_i + 1, n - 1)
+    f = c - lo_i                                    # (..., 3) per-channel fraction
+    r0, g0, b0 = lo_i[..., 0], lo_i[..., 1], lo_i[..., 2]
+    r1, g1, b1 = hi_i[..., 0], hi_i[..., 1], hi_i[..., 2]
+    c00 = cube[b0, g0, r0] + (cube[b0, g0, r1] - cube[b0, g0, r0]) * f[..., 0:1]
+    c01 = cube[b0, g1, r0] + (cube[b0, g1, r1] - cube[b0, g1, r0]) * f[..., 0:1]
+    c10 = cube[b1, g0, r0] + (cube[b1, g0, r1] - cube[b1, g0, r0]) * f[..., 0:1]
+    c11 = cube[b1, g1, r0] + (cube[b1, g1, r1] - cube[b1, g1, r0]) * f[..., 0:1]
+    c0 = c00 + (c01 - c00) * f[..., 1:2]
+    c1 = c10 + (c11 - c10) * f[..., 1:2]
+    return c0 + (c1 - c0) * f[..., 2:3]
+
+
+_CUBES: dict = {}
+
+
+def load_cube(path: str):
+    """mtime-cached .cube loader (preview and export share it)."""
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return None
+    ent = _CUBES.get(path)
+    if ent is None or ent[0] != mt:
+        _CUBES[path] = (mt, parse_cube(path))
+    return _CUBES[path][1]
 
 
 def _smoothstep(x):
@@ -71,18 +140,21 @@ def _grade_apply(x: np.ndarray, g: Grade) -> np.ndarray:
 
 
 def transform(rgb: np.ndarray, look: str, gains: Optional[Tuple[float, float, float]], strength: float,
-              grade: Optional[Grade] = None) -> np.ndarray:
+              grade: Optional[Grade] = None, cube=None) -> np.ndarray:
     """RGB float (0-1) -> graded RGB (same shape).
 
-    Order: auto gains -> manual grade (absolute) -> preset look mixed in at
-    ``strength``. With ``grade=None`` this is exactly the old transform."""
+    Order: auto gains -> manual grade (absolute) -> preset look or .cube LUT
+    mixed in at ``strength``. With ``grade=None`` this is exactly the old transform."""
     x = rgb.copy()
     if gains is not None:
         x = x * np.asarray(gains, np.float32)
     if grade is not None and grade.active:
         x = _grade_apply(x, grade)
     base = x
-    if look == "warm":
+    if look == "cube":
+        if cube is not None:
+            x = _cube_apply(x, cube)
+    elif look == "warm":
         x = x * np.array([1.06, 1.0, 0.92], np.float32)
         x = _sat(x, 1.05)
     elif look == "cool":
@@ -114,11 +186,15 @@ class Look:
     gains: Optional[Tuple[float, float, float]] = None
     """Auto white balance / exposure gains (r, g, b), or None."""
     grade: Optional[Grade] = None
+    cube: Optional[tuple] = None
+    """Parsed .cube LUT (cube, domain_lo, domain_hi) — used when look="cube"."""
 
     @property
     def active(self) -> bool:
         g = self.grade
-        return ((self.look != "none" and self.strength > 0) or self.gains is not None
+        return ((self.look != "none" and self.look != "cube" and self.strength > 0)
+                or (self.look == "cube" and self.cube is not None and self.strength > 0)
+                or self.gains is not None
                 or (g is not None and (g.active or g.vignette > 0)))
 
 
@@ -131,7 +207,7 @@ def _table(lk: Look) -> np.ndarray:
     g = (np.arange(n, dtype=np.float32) * step + step / 2.0) / 255.0
     bb, gg, rr = np.meshgrid(g, g, g, indexing="ij")
     rgb = np.stack([rr, gg, bb], axis=-1).reshape(-1, 3)
-    out = transform(rgb, lk.look, lk.gains, lk.strength, lk.grade)
+    out = transform(rgb, lk.look, lk.gains, lk.strength, lk.grade, lk.cube)
     d = (out - rgb) * 255.0
     return np.round(d[:, ::-1]).astype(np.int16)   # BGR offsets
 

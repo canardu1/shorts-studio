@@ -68,13 +68,14 @@ The honest trade-off: cloud tools offer web editors, team features and zero inst
 ### ✂️ Editing
 - **Cut pauses** (Silero VAD or level/dB), **cut breaths**, **cut fillers**, **cut retakes** — last take wins
 - **Best moments finder** — strongest 30–60 s clips, boosted by **YAMNet** laughter/applause/music detection
-- **Manual timeline editing** — drag a range, **X** to cut (amber, on top of the automatic cuts), right-click to restore; trim clip edges from the same menu; everything undoable
+- **Manual timeline editing** — drag a range, **X** to cut (amber, on top of the automatic cuts), right-click to restore; **B** marks a blade point, second **B** cuts between marks; selection **snaps** to shot cuts, markers and events; trim clip edges or cut to end from the same menu; everything undoable
 - **Clip ranges** + **batch** a whole folder
 
 ### 💬 Captions
 - Local **Whisper transcription**, cached per file
 - **TikTok-style word-by-word** captions or classic lines — colour, position, uppercase
 - **Full styling** — any installed font, size, text/highlight colours, optional pill box, motion (fade, slide-up, pop-on-word)
+- **Style templates** — one-click caption looks (Default, Hormozi, Minimal, Cinematic) plus your own saved styles
 - **Subtitle editor** — fix words, find & replace, timings re-spread automatically
 - **English translation** or **bilingual** captions
 
@@ -87,7 +88,7 @@ The honest trade-off: cloud tools offer web editors, team features and zero inst
 - **Slow motion ×2/×4** — **RIFE** invents real in-between frames, or instant FFmpeg blend
 - **Face restoration:** GPEN-256/512, GFPGAN, CodeFormer
 - **Skin-tone fix** (exportable `.cube` LUT) · **Beauty** with neural face-parsing mask
-- **Colour:** 6 looks + auto WB + full manual **grade** (temp, tint, EV, contrast, sat, shadows, highlights, vignette)
+- **Colour:** 6 looks + **your own .cube LUTs** + auto WB + full manual **grade** (temp, tint, EV, contrast, sat, shadows, highlights, vignette)
 - **Lift dark shots** — SG-LLIE or URetinex neural low-light
 - **Blur background** — RVM fast or **MODNet** quality matting, guided-filter edges
 - **Enhance** — fast sharpen or Real-ESRGAN upscaling

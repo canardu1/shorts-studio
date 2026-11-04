@@ -154,6 +154,27 @@ def test_look_tables():
     assert wb[..., 2].mean() > img[..., 2].mean()
 
 
+def test_cube_lut(tmp_path):
+    p = tmp_path / "id.cube"
+    rows = ["LUT_3D_SIZE 2"] + ["%d %d %d" % (r, g, b)
+                                for b in range(2) for g in range(2) for r in range(2)]
+    p.write_text("\n".join(rows))
+    lut = look.parse_cube(str(p))
+    assert lut is not None and lut[0].shape == (2, 2, 2, 3)
+    x = np.array([[0.2, 0.5, 0.8]], np.float32)
+    assert np.allclose(look._cube_apply(x, lut), x, atol=0.02)
+    p.write_text("\n".join(rows[:1] + ["%d %d %d" % (1 - r, 1 - g, 1 - b)
+                                       for b in range(2) for g in range(2) for r in range(2)]))
+    lut = look.load_cube(str(p))
+    assert np.allclose(look._cube_apply(x, lut), 1 - x, atol=0.02)
+    lk = look.Look("cube", 1.0, None, None, lut)
+    assert lk.active and np.allclose(look.transform(x, "cube", None, 1.0, None, lut), 1 - x, atol=0.02)
+    assert not look.Look("cube", 1.0).active
+    assert look.parse_cube(str(tmp_path / "missing.cube")) is None
+    (tmp_path / "bad.cube").write_text("TITLE hi\nLUT_1D_SIZE 8\n")
+    assert look.parse_cube(str(tmp_path / "bad.cube")) is None
+
+
 def test_grade_controls():
     rng = np.random.default_rng(0)
     img = rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)

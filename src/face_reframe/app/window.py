@@ -281,13 +281,16 @@ class MainWindow(QMainWindow):
         self._people_for = None
         self.pcm = {}                            # abs path -> 16 kHz audio (current file only)
         self.removed = []                        # preview: cut ranges (s), source timeline
+        self._blade = None                       # pending blade mark (s) for B-key cuts
         self._split = None
         self._punch = None
         self._burner = None
         self._renderer = None
         self.user_presets: Dict[str, dict] = {}
+        self.cap_templates: Dict[str, dict] = {}
         self.music_path = ""
         self.logo_path = ""
+        self.lut_path = ""
         self.card_in_path = ""
         self.card_out_path = ""
         self.bg_image_path = ""
@@ -549,8 +552,9 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence.Redo, self, self._shortcut_redo)
         QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self._shortcut_redo)
         self.timeline.setFocusPolicy(Qt.ClickFocus)
-        for seq, fn in (("X", self._cut_sel), ("Backspace", self._restore_sel),
-                        ("Delete", self._restore_sel), ("Escape", self.timeline.clear_sel)):
+        for seq, fn in (("X", self._cut_sel), ("B", self._blade_cut),
+                        ("Backspace", self._restore_sel), ("Delete", self._restore_sel),
+                        ("Escape", self._clear_sel_blade)):
             sc = QShortcut(QKeySequence(seq), self.timeline)
             sc.setContext(Qt.WidgetWithChildrenShortcut)
             sc.activated.connect(fn)
@@ -851,6 +855,23 @@ class MainWindow(QMainWindow):
         f.addRow(section(tr("Look")))
         f.addRow(tr("Preset"), W["look"])
         f.addRow(tr("Strength"), W["look_strength"])
+        self.lut_edit = QLineEdit()
+        self.lut_edit.setReadOnly(True)
+        self.lut_edit.setPlaceholderText(tr("Pick a .cube file"))
+        ltb = QPushButton("…")
+        ltb.setFixedWidth(32)
+        ltb.clicked.connect(self._pick_lut)
+        ltc = QPushButton("✕")
+        ltc.setFixedWidth(32)
+        ltc.clicked.connect(lambda: self._set_lut(""))
+        ltrow = QHBoxLayout()
+        ltrow.addWidget(self.lut_edit, 1)
+        ltrow.addWidget(ltb)
+        ltrow.addWidget(ltc)
+        self.lut_row = QWidget()
+        self.lut_row.setLayout(ltrow)
+        self.lut_row.setVisible(False)
+        f.addRow(tr("LUT file"), self.lut_row)
         f.addRow(W["auto_wb"])
         f.addRow(hint(tr("Auto balance evens out colour and exposure: handy to give shorts of the same series the same look.")))
         W["lowlight"] = seg([(tr("Off"), "off"), (tr("Fast"), "sg_llie"), (tr("Quality"), "uretinex")])
@@ -902,6 +923,21 @@ class MainWindow(QMainWindow):
         W["caption_anim"] = combo([(tr("None"), "off"), (tr("Fade"), "fade"),
                                    (tr("Slide up"), "slide"), (tr("Pop on word"), "pop")])
         f.addRow(tr("Captions"), W["subtitles"])
+        self.captpl_box = QComboBox()
+        self.captpl_box.activated.connect(self._apply_captpl)
+        ct_save = QPushButton(tr("Save"))
+        ct_save.setFixedWidth(52)
+        ct_save.clicked.connect(self._save_captpl)
+        ct_del = QPushButton("✕")
+        ct_del.setFixedWidth(32)
+        ct_del.clicked.connect(self._delete_captpl)
+        ctrow = QHBoxLayout()
+        ctrow.addWidget(self.captpl_box, 1)
+        ctrow.addWidget(ct_save)
+        ctrow.addWidget(ct_del)
+        ctw = QWidget()
+        ctw.setLayout(ctrow)
+        f.addRow(tr("Style template"), ctw)
         f.addRow(tr("Style"), W["caption_style"])
         f.addRow(tr("Language"), W["language"])
         f.addRow(tr("Words per line"), W["caption_words"])
@@ -1177,6 +1213,7 @@ class MainWindow(QMainWindow):
             hook_by_file=dict(self.hook_text),
             cover=v("cover"), social=v("social"), sub_lang=v("sub_lang"),
             look=v("look"), look_strength=v("look_strength"), auto_wb=v("auto_wb"),
+            lut_path=self.lut_path or None,
             grade=Grade(temp=v("color_temp"), tint=v("color_tint"), exposure=v("color_exp"),
                         contrast=v("color_con"), saturation=v("color_sat"),
                         shadows=v("color_shad"), highlights=v("color_high"), vignette=v("color_vig")),
@@ -1231,6 +1268,16 @@ class MainWindow(QMainWindow):
             if text and self._val("hook") != "custom":
                 self._set("hook", "custom")
             self.replan_timer.start()
+
+    def _pick_lut(self):
+        f, _ = QFileDialog.getOpenFileName(self, tr("Colour LUT"), "", tr("LUT files (*.cube)"))
+        if f:
+            self._set_lut(f)
+
+    def _set_lut(self, path):
+        self.lut_path = path if path and os.path.exists(path) else ""
+        self.lut_edit.setText(os.path.basename(self.lut_path))
+        self._settings_changed()
 
     def _pick_logo(self):
         f, _ = QFileDialog.getOpenFileName(self, tr("Logo"), "", tr("Images (*.png *.jpg *.jpeg *.webp)"))
@@ -1350,6 +1397,7 @@ class MainWindow(QMainWindow):
         self._set_music(st.value("music", "") or "")
         self.cta_edit.setText(st.value("cta", "") or "")
         self._set_logo(st.value("logo", "") or "")
+        self._set_lut(st.value("lut_path", "") or "")
         self._set_bg("image", st.value("bg_image", "") or "")
         self._set_bg("video", st.value("bg_video", "") or "")
         self.bg_color = st.value("bg_color", "#00b140") or "#00b140"
@@ -1357,6 +1405,8 @@ class MainWindow(QMainWindow):
         self.caption_font.setCurrentFont(QFont(st.value("caption_font", "Arial Black") or "Arial Black"))
         self.user_presets = presets.load_user(st.value("presets", "") or "")
         self._fill_presets()
+        self.cap_templates = presets.load_user(st.value("cap_templates", "") or "")
+        self._fill_captpl()
         geo = st.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)
@@ -1377,11 +1427,13 @@ class MainWindow(QMainWindow):
         st.setValue("music", self.music_path)
         st.setValue("cta", self.cta_edit.text())
         st.setValue("logo", self.logo_path)
+        st.setValue("lut_path", self.lut_path)
         st.setValue("bg_image", self.bg_image_path)
         st.setValue("bg_video", self.bg_video_path)
         st.setValue("bg_color", self.bg_color)
         st.setValue("caption_font", self.caption_font.currentFont().family())
         st.setValue("presets", presets.dump_user(self.user_presets))
+        st.setValue("cap_templates", presets.dump_user(self.cap_templates))
         st.setValue("geometry", self.saveGeometry())
 
     def _sync_enabled(self):
@@ -1422,6 +1474,7 @@ class MainWindow(QMainWindow):
             self.w["mv_%s_amount" % k].setEnabled(v("mv_" + k))
         self.w["mv_every"].setEnabled(v("mv_transition") != "off")
         self.w["look_strength"].setEnabled(v("look") != "none")
+        self.lut_row.setVisible(v("look") == "cube")
         self.w["stab_amount"].setEnabled(v("stabilize"))
         self.w["hook_dur"].setEnabled(v("hook") != "off")
         self.hook_edit.setEnabled(v("hook") != "off")
@@ -1477,6 +1530,50 @@ class MainWindow(QMainWindow):
             return
         self.user_presets.pop(data[1], None)
         self._fill_presets()
+        self._save_settings()
+
+    # ---------------------------------------------------------- caption styles
+    def _fill_captpl(self):
+        self.captpl_box.blockSignals(True)
+        self.captpl_box.clear()
+        self.captpl_box.addItem(tr("— template —"), None)
+        for name in presets.CAPTION_BUILTIN:
+            self.captpl_box.addItem(name, ("builtin", name))
+        for name in sorted(self.cap_templates):
+            self.captpl_box.addItem("★ " + name, ("user", name))
+        self.captpl_box.blockSignals(False)
+
+    def _apply_captpl(self, idx):
+        data = self.captpl_box.itemData(idx)
+        if not data:
+            return
+        kind, name = data
+        values = presets.CAPTION_BUILTIN[name] if kind == "builtin" else self.cap_templates.get(name, {})
+        for k, val in values.items():
+            if k == "caption_font":
+                self.caption_font.setCurrentFont(QFont(val))
+            else:
+                self._set(k, val)
+        self._log(tr("Caption style “%s” applied") % name)
+
+    def _save_captpl(self):
+        name, ok = QInputDialog.getText(self, tr("Save caption style"), tr("Style name:"))
+        name = (name or "").strip()
+        if not ok or not name:
+            return
+        self.cap_templates[name] = {k: self._val(k) for k in presets.CAPTION_KEYS}
+        self.cap_templates[name]["caption_font"] = self.caption_font.currentFont().family()
+        self._fill_captpl()
+        self.captpl_box.setCurrentIndex(self.captpl_box.findData(("user", name)))
+        self._save_settings()
+
+    def _delete_captpl(self):
+        data = self.captpl_box.currentData()
+        if not data or data[0] != "user":
+            QMessageBox.information(self, APP_NAME, tr("Only styles you saved yourself (★) can be deleted."))
+            return
+        self.cap_templates.pop(data[1], None)
+        self._fill_captpl()
         self._save_settings()
 
     # ---------------------------------------------------------- misc settings
@@ -1642,6 +1739,8 @@ class MainWindow(QMainWindow):
                 self.proxy = None
             self.pcm = {}
             self.removed = []
+            self._blade = None
+            self.timeline.blade = None
             self.current = path
             if path:
                 try:
@@ -1918,9 +2017,10 @@ class MainWindow(QMainWindow):
         self._look = None
         grade_on = s.grade is not None and (s.grade.active or s.grade.vignette > 0)
         if s.look != "none" or s.auto_wb or grade_on:
-            from .look import Look
+            from .look import Look, load_cube
+            cube = load_cube(s.lut_path or "") if s.look == "cube" else None
             self._look = Look(s.look, s.look_strength,
-                              self._gains_for() if s.auto_wb else None, s.grade)
+                              self._gains_for() if s.auto_wb else None, s.grade, cube)
         man = self.manual.get(key) or []
         if man:
             info += tr(" · %d manual corrections") % len(man)
@@ -2967,6 +3067,7 @@ class MainWindow(QMainWindow):
             "card_in": self.card_in_path or "", "card_out": self.card_out_path or "",
             "bg_image": self.bg_image_path or "", "bg_video": self.bg_video_path or "",
             "bg_color": self.bg_color, "caption_font": self.caption_font.currentFont().family(),
+            "lut_path": self.lut_path or "",
             "out_dir": self.out_dir.text(), "suffix": self.suffix.text(),
             "current": self.current or "",
         }
@@ -2999,6 +3100,7 @@ class MainWindow(QMainWindow):
         self.hook_text = dict(d.get("hook_text") or {})
         self._set_music(d.get("music") or "")
         self._set_logo(d.get("logo") or "")
+        self._set_lut(d.get("lut_path") or "")
         self._set_card("in", d.get("card_in") or "")
         self._set_card("out", d.get("card_out") or "")
         self._set_bg("image", d.get("bg_image") or "")
@@ -3252,6 +3354,7 @@ class MainWindow(QMainWindow):
         a_res.setEnabled(sel is not None and any(a < sel[1] and b > sel[0] for a, b in mcuts))
         a_clr = m.addAction(tr("Clear manual cuts"))
         a_clr.setEnabled(bool(mcuts))
+        a_tail = m.addAction(tr("Cut %s to end") % _fmt(t))
         m.addSeparator()
         a_in = m.addAction(tr("Set clip start at %s") % _fmt(t))
         a_out = m.addAction(tr("Set clip end at %s") % _fmt(t))
@@ -3268,6 +3371,9 @@ class MainWindow(QMainWindow):
             self._restore_sel()
         elif pick is a_clr:
             self._clear_mcuts()
+        elif pick is a_tail:
+            if self.reader:
+                self._cut_range(t, self.reader.count / self.reader.fps, "to end")
         elif pick is a_in:
             self._clip_edge(True, t)
         elif pick is a_out:
@@ -3279,24 +3385,53 @@ class MainWindow(QMainWindow):
         it = self.queue.currentItem()
         return it.data(Qt.UserRole) if it else None
 
+    def _cut_range(self, a: float, b: float, how: str = "manual"):
+        """Shared manual-cut path: merge into manual_cuts, undo, replan."""
+        key = os.path.abspath(self.current)
+        old = list(self.manual_cuts.get(key, []))
+        mcuts = sorted(old + [(a, b)])
+        merged = [list(mcuts[0])]
+        for x, y in mcuts[1:]:
+            if x <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], y)
+            else:
+                merged.append([x, y])
+        self._push_undo(tr("Manual cut"), "mcuts", key, old)
+        self.manual_cuts[key] = [tuple(m) for m in merged]
+        self._log(tr("Cut %s–%s (%s)") % (_fmt(a), _fmt(b), how))
+        self._replan()
+
     def _cut_sel(self):
         sel = self.timeline.sel
         if sel is None or not self.current:
             return
-        key = os.path.abspath(self.current)
-        old = list(self.manual_cuts.get(key, []))
-        mcuts = sorted(old + [sel])
-        merged = [list(mcuts[0])]
-        for a, b in mcuts[1:]:
-            if a <= merged[-1][1]:
-                merged[-1][1] = max(merged[-1][1], b)
-            else:
-                merged.append([a, b])
-        self._push_undo(tr("Manual cut"), "mcuts", key, old)
-        self.manual_cuts[key] = [tuple(m) for m in merged]
         self.timeline.clear_sel()
-        self._log(tr("Cut %s–%s (manual)") % (_fmt(sel[0]), _fmt(sel[1])))
-        self._replan()
+        self._cut_range(sel[0], sel[1])
+
+    def _blade_cut(self):
+        """B: first press marks the blade at the playhead, second cuts between
+        the mark and the playhead — the fast way to take out a boring stretch."""
+        if not self.current or not self.reader:
+            return
+        t = self.timeline.pos / max(1.0, self.reader.fps)
+        if self._blade is None:
+            self._blade = t
+            self.timeline.blade = t
+            self.timeline.update()
+            self._log(tr("Blade at %s — press B at the other end to cut") % _fmt(t))
+            return
+        a, b = sorted((self._blade, t))
+        self._blade = None
+        self.timeline.blade = None
+        self.timeline.update()
+        if b - a >= 0.02:
+            self._cut_range(a, b, "blade")
+
+    def _clear_sel_blade(self):
+        if self._blade is not None:
+            self._blade = None
+            self.timeline.blade = None
+        self.timeline.clear_sel()
 
     def _restore_sel(self):
         sel = self.timeline.sel

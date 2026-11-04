@@ -727,4 +727,23 @@ _IT = {
     "Salient-object detection unavailable (%s)": "Rilevamento oggetto saliente non disponibile (%s)",
     "“Follow object” tracks the most salient thing in shots without faces — products, pets, B-roll — with the same U2-Net-p model used for thumbnail cut-outs (downloaded once, ~5 MB). Drag the yellow box in the preview to correct the crop from that point on. Below the preview, pick who to follow (select every thumbnail of the same person). “Whoever speaks” cuts to who is talking — Mouth motion judges by the lips, Voice ID (ECAPA, 84 MB once) listens to who is actually speaking and marks voice changes on the timeline.":
         "“Segui oggetto” insegue la cosa più saliente nelle scene senza volti — prodotti, animali, B-roll — con lo stesso modello U2-Net-p degli scontorni per copertina (scaricato una volta, ~5 MB). Trascina il riquadro giallo nell'anteprima per correggere il ritaglio da quel punto in poi. Sotto l'anteprima scegli chi seguire (seleziona tutte le miniature della stessa persona). “Chi parla” taglia su chi sta parlando — Movimento labbra giudica dalle labbra, ID voce (ECAPA, 84 MB una volta) ascolta chi parla davvero e segna i cambi voce sulla timeline.",
+    "Custom .cube file…": "File .cube personalizzato…",
+    "Colour LUT": "LUT colore",
+    "LUT file": "File LUT",
+    "Pick a .cube file": "Scegli un file .cube",
+    "LUT files (*.cube)": "File LUT (*.cube)",
+    "  LUT file unreadable or missing: keeping colours unchanged":
+        "  File LUT illeggibile o mancante: colori invariati",
+    "Style template": "Modello stile",
+    "— template —": "— modello —",
+    "Save caption style": "Salva stile sottotitoli",
+    "Style name:": "Nome stile:",
+    "Caption style “%s” applied": "Stile sottotitoli “%s” applicato",
+    "Only styles you saved yourself (★) can be deleted.":
+        "Puoi eliminare solo gli stili salvati da te (★).",
+    "Blade at %s — press B at the other end to cut":
+        "Lama a %s — premi B all'altro capo per tagliare",
+    "Cut %s to end": "Taglia da %s alla fine",
+    "to end": "alla fine",
+    "blade": "lama",
 }

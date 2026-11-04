@@ -38,6 +38,32 @@ BUILTIN: Dict[str, dict] = {
 }
 
 
+# Caption-only style templates: same dict shape (key -> value) but limited to
+# the caption controls; the font family travels under "caption_font".
+CAPTION_KEYS = ("caption_style", "caption_words", "caption_max_dur", "caption_pos",
+                "caption_color", "caption_hl", "caption_upper", "caption_size",
+                "caption_box", "caption_anim")
+
+CAPTION_BUILTIN: Dict[str, dict] = {
+    "Default": dict(caption_style="word", caption_words=3, caption_max_dur=1.6,
+                    caption_pos=0.7, caption_color="#FFFFFF", caption_hl="#FFD400",
+                    caption_upper=True, caption_size=0.075, caption_box="none",
+                    caption_anim="off", caption_font="Arial Black"),
+    "Hormozi": dict(caption_style="word", caption_words=3, caption_max_dur=1.4,
+                    caption_pos=0.78, caption_color="#FFFFFF", caption_hl="#7CFF6B",
+                    caption_upper=True, caption_size=0.1, caption_box="none",
+                    caption_anim="pop", caption_font="Arial Black"),
+    "Minimal": dict(caption_style="line", caption_words=6, caption_max_dur=2.2,
+                    caption_pos=0.72, caption_color="#FFFFFF", caption_hl="#4FD8FF",
+                    caption_upper=False, caption_size=0.05, caption_box="pill",
+                    caption_anim="fade", caption_font="Helvetica"),
+    "Cinematic": dict(caption_style="line", caption_words=7, caption_max_dur=2.5,
+                      caption_pos=0.88, caption_color="#FFFFFF", caption_hl="#FFD400",
+                      caption_upper=False, caption_size=0.048, caption_box="none",
+                      caption_anim="fade", caption_font="Georgia"),
+}
+
+
 def load_user(raw: str) -> Dict[str, dict]:
     try:
         data = json.loads(raw or "{}")
