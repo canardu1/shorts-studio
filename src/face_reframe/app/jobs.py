@@ -996,6 +996,7 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                     tmp = sl
                 else:
                     log(tr("  slow motion failed: keeping normal speed"))
+            os.makedirs(os.path.dirname(out), exist_ok=True)
             shutil.move(tmp, out)
             done.append(out)
             if aspect == aspects[0] and s.cover:
