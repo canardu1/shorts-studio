@@ -20,7 +20,7 @@ from PySide6.QtCore import QObject, QPointF, QRectF, QSettings, QSize, Qt, QThre
 from PySide6.QtGui import (QColor, QDesktopServices, QIcon, QImage, QKeySequence, QPainter,
                            QPalette, QPen, QPixmap, QPolygonF, QShortcut)
 from PySide6.QtWidgets import (
-    QAbstractItemView, QAbstractSpinBox, QApplication, QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox,
+    QAbstractItemView, QAbstractSpinBox, QApplication, QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDoubleSpinBox,
     QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QScrollArea, QSlider, QSpinBox, QSplitter, QTabWidget, QToolButton, QVBoxLayout,
@@ -290,6 +290,9 @@ class MainWindow(QMainWindow):
         self.logo_path = ""
         self.card_in_path = ""
         self.card_out_path = ""
+        self.bg_image_path = ""
+        self.bg_video_path = ""
+        self.bg_color = "#00b140"
         self.hook_text: Dict[str, str] = {}     # abs path -> custom hook title
         self._undo: List[tuple] = []
         self._redo: List[tuple] = []
@@ -761,12 +764,45 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Strength"), W["stab_amount"])
         f.addRow(hint(tr("Measures camera shake and compensates by shifting the crop (plus a slight rotation). The first run analyses the whole video.")))
         f.addRow(section(tr("Background")))
-        W["bg_blur"] = QCheckBox(tr("Blur background"))
+        W["bg_blur"] = QCheckBox(tr("Cut the person out"))
+        W["bg_fill"] = combo([(tr("Blur"), "blur"), (tr("Solid colour"), "color"),
+                              (tr("Image"), "image"), (tr("Video (loops)"), "video")])
         W["bg_blur_amount"] = dspin(0.1, 1.5, 0.05, 0.6)
+        self.bg_color_btn = QPushButton()
+        self.bg_color_btn.setFixedSize(52, 24)
+        self.bg_color_btn.clicked.connect(self._pick_bg_color)
+        self._bg_color_swatch()
+        self.bg_img_edit = QLineEdit()
+        self.bg_img_edit.setReadOnly(True)
+        self.bg_img_edit.setPlaceholderText(tr("No background image"))
+        self.bg_vid_edit = QLineEdit()
+        self.bg_vid_edit.setReadOnly(True)
+        self.bg_vid_edit.setPlaceholderText(tr("No background video"))
         W["bg_engine"] = seg([(tr("Fast (RVM)"), "rvm"), (tr("Quality (MODNet)"), "modnet")])
+
+        def _bg_pick_row(edit, which):
+            pb = QPushButton("…")
+            pb.setFixedWidth(32)
+            pb.clicked.connect(lambda: self._pick_bg(which))
+            pc = QPushButton("✕")
+            pc.setFixedWidth(32)
+            pc.clicked.connect(lambda: self._set_bg(which, ""))
+            r = QHBoxLayout()
+            r.addWidget(edit, 1)
+            r.addWidget(pb)
+            r.addWidget(pc)
+            self._bg_rows = getattr(self, "_bg_rows", {})
+            self._bg_rows[which] = [edit, pb, pc]
+            return r
+
         f.addRow(W["bg_blur"])
+        f.addRow(tr("Fill"), W["bg_fill"])
         f.addRow(tr("Strength"), W["bg_blur_amount"])
+        f.addRow(tr("Colour"), self.bg_color_btn)
+        f.addRow(tr("Image"), _bg_pick_row(self.bg_img_edit, "image"))
+        f.addRow(tr("Video"), _bg_pick_row(self.bg_vid_edit, "video"))
         f.addRow(tr("Matte engine"), W["bg_engine"])
+        f.addRow(hint(tr("Blur keeps the portrait-lens look; colour, image and video replace the backdrop entirely — a digital green screen (#00b140 for classic chroma).")))
         f.addRow(hint(tr("MODNet (24 MB once) cuts much finer edges — hair, glasses, hands. The preview shows it on still frames (the fast engine keeps playback smooth); the export uses the one you pick.")))
         f.addRow(hint(tr("Neural person matte (RVM): keeps the subject sharp and blurs everything else, like a portrait lens. The 14 MB model downloads on first export.")))
         f.addRow(section(tr("Sharpness & upscale")))
@@ -1138,6 +1174,9 @@ class MainWindow(QMainWindow):
             stabilize=v("stabilize"), stab_amount=v("stab_amount"), encoder=v("encoder"),
             bg_blur=v("bg_blur_amount") if v("bg_blur") else 0.0,
             bg_engine=v("bg_engine"),
+            bg_fill=v("bg_fill") if v("bg_blur") else "blur",
+            bg_color=self.bg_color, bg_image=self.bg_image_path or None,
+            bg_video=self.bg_video_path or None,
             restore=v("restore"), restore_blend=v("restore_blend"), restore_fidelity=v("restore_fidelity"),
             formats=formats, layout=v("layout"), punch=v("punch"), punch_zoom=v("punch_zoom"),
             cut_pauses=v("cut_pauses"),
@@ -1207,6 +1246,36 @@ class MainWindow(QMainWindow):
         edit.setText(os.path.basename(p))
         self._settings_changed()
 
+    def _pick_bg_color(self):
+        from PySide6.QtGui import QColor
+        c = QColorDialog.getColor(QColor(self.bg_color), self, tr("Background colour"))
+        if c.isValid():
+            self.bg_color = c.name()
+            self._bg_color_swatch()
+            self._settings_changed()
+
+    def _bg_color_swatch(self):
+        self.bg_color_btn.setStyleSheet("background:%s; border-radius:4px" % self.bg_color)
+
+    def _pick_bg(self, which):
+        if which == "image":
+            f, _ = QFileDialog.getOpenFileName(self, tr("Background image"), "",
+                                               tr("Images (*.png *.jpg *.jpeg *.webp)"))
+        else:
+            f, _ = QFileDialog.getOpenFileName(self, tr("Background video"), "",
+                                               tr("Videos (*.mp4 *.mov *.mkv *.webm)"))
+        if f:
+            self._set_bg(which, f)
+
+    def _set_bg(self, which, path):
+        p = path if path and os.path.exists(path) else ""
+        if which == "image":
+            self.bg_image_path, edit = p, self.bg_img_edit
+        else:
+            self.bg_video_path, edit = p, self.bg_vid_edit
+        edit.setText(os.path.basename(p))
+        self._settings_changed()
+
     def beauty_settings(self):
         if not self._val("beauty"):
             return None
@@ -1271,6 +1340,10 @@ class MainWindow(QMainWindow):
         self._set_music(st.value("music", "") or "")
         self.cta_edit.setText(st.value("cta", "") or "")
         self._set_logo(st.value("logo", "") or "")
+        self._set_bg("image", st.value("bg_image", "") or "")
+        self._set_bg("video", st.value("bg_video", "") or "")
+        self.bg_color = st.value("bg_color", "#00b140") or "#00b140"
+        self._bg_color_swatch()
         self.user_presets = presets.load_user(st.value("presets", "") or "")
         self._fill_presets()
         geo = st.value("geometry")
@@ -1293,6 +1366,9 @@ class MainWindow(QMainWindow):
         st.setValue("music", self.music_path)
         st.setValue("cta", self.cta_edit.text())
         st.setValue("logo", self.logo_path)
+        st.setValue("bg_image", self.bg_image_path)
+        st.setValue("bg_video", self.bg_video_path)
+        st.setValue("bg_color", self.bg_color)
         st.setValue("presets", presets.dump_user(self.user_presets))
         st.setValue("geometry", self.saveGeometry())
 
@@ -1310,7 +1386,12 @@ class MainWindow(QMainWindow):
         for k in ("sharpen", "face_boost"):
             self.w[k].setEnabled(v("enhance") != "off")
         self.w["restore_blend"].setEnabled(v("restore") != "off")
-        self.w["bg_blur_amount"].setEnabled(v("bg_blur"))
+        self.w["bg_fill"].setEnabled(v("bg_blur"))
+        self.w["bg_blur_amount"].setEnabled(v("bg_blur") and v("bg_fill") == "blur")
+        self.bg_color_btn.setEnabled(v("bg_blur") and v("bg_fill") == "color")
+        for which in ("image", "video"):
+            for wd in self._bg_rows[which]:
+                wd.setEnabled(v("bg_blur") and v("bg_fill") == which)
         self.w["bg_engine"].setEnabled(v("bg_blur"))
         self.w["look_room_amount"].setEnabled(v("look_room"))
         self.w["skin_strength"].setEnabled(v("skin"))
@@ -1784,8 +1865,8 @@ class MainWindow(QMainWindow):
                 if ov.hook != "off" else ""
             parts += build_overlays(ov, hook, self.reader.count, fps, ow, oh, self._title_renderer(),
                                     lambda *_: None)
-        if s.bg_blur > 0:
-            from .rvm import BlurBackground, rvm_available
+        if s.bg_blur > 0 or s.bg_fill not in ("blur", "off"):
+            from .rvm import BlurBackground, FillBackground, make_fill, rvm_available
             if rvm_available():
                 if self._matter is None:
                     from .rvm import Matter
@@ -1802,9 +1883,19 @@ class MainWindow(QMainWindow):
                         alt = self._matter_mod
                     else:
                         info += tr(" · MODNet downloads on first export")
-                parts.insert(0, BlurBackground(self._matter, s.bg_blur,
-                                               alt_matter=alt,
-                                               use_alt=lambda: not self._preview_moving))  # first: don't soften text
+                bg = None
+                if s.bg_fill not in ("blur", "off"):
+                    fn = make_fill(s.bg_fill, ow, oh, fps, s.bg_color, s.bg_image, s.bg_video,
+                                   lambda *_: None)
+                    if fn is not None:
+                        bg = FillBackground(self._matter, fn, alt_matter=alt,
+                                            use_alt=lambda: not self._preview_moving)
+                if bg is None and s.bg_blur > 0:
+                    bg = BlurBackground(self._matter, s.bg_blur,
+                                        alt_matter=alt,
+                                        use_alt=lambda: not self._preview_moving)
+                if bg is not None:
+                    parts.insert(0, bg)   # first: don't soften text
             else:
                 info += tr(" · background blur: the model downloads on first export")
         if parts:
@@ -2858,6 +2949,8 @@ class MainWindow(QMainWindow):
             "hook_text": {k: t for k, t in self.hook_text.items() if t},
             "music": self.music_path or "", "logo": self.logo_path or "", "cta": self.cta_edit.text(),
             "card_in": self.card_in_path or "", "card_out": self.card_out_path or "",
+            "bg_image": self.bg_image_path or "", "bg_video": self.bg_video_path or "",
+            "bg_color": self.bg_color,
             "out_dir": self.out_dir.text(), "suffix": self.suffix.text(),
             "current": self.current or "",
         }
@@ -2892,6 +2985,10 @@ class MainWindow(QMainWindow):
         self._set_logo(d.get("logo") or "")
         self._set_card("in", d.get("card_in") or "")
         self._set_card("out", d.get("card_out") or "")
+        self._set_bg("image", d.get("bg_image") or "")
+        self._set_bg("video", d.get("bg_video") or "")
+        self.bg_color = d.get("bg_color") or "#00b140"
+        self._bg_color_swatch()
         self.cta_edit.setText(d.get("cta") or "")
         self.out_dir.setText(d.get("out_dir") or "")
         self.suffix.setText(d.get("suffix") or "_short")

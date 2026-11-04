@@ -153,6 +153,12 @@ class BlurBackground:
         self.alt_matter, self.use_alt = alt_matter, use_alt
         self._last = -1
 
+    def _bg(self, i: int, frame: np.ndarray) -> np.ndarray:
+        """What replaces the background (float32 frame); blurred by default."""
+        import cv2
+        sigma = 4.0 + 26.0 * self.strength
+        return cv2.GaussianBlur(frame, (0, 0), sigma).astype(np.float32)
+
     def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
         import cv2
         if self._last < 0 or i <= self._last:
@@ -168,25 +174,132 @@ class BlurBackground:
             a = refine_matte(frame, a)
         else:
             a = cv2.GaussianBlur(a, (0, 0), 1.5)
-        sigma = 4.0 + 26.0 * self.strength
-        bg = cv2.GaussianBlur(frame, (0, 0), sigma).astype(np.float32)
+        bg = self._bg(i, frame)
         return (frame.astype(np.float32) * a[..., None] + bg * (1 - a[..., None])).astype(np.uint8)
 
 
-def build(strength: float, engine: str = "rvm", progress=None, log=print) -> Optional[BlurBackground]:
-    """Blur hook, downloading the model on first use. ``None`` on failure."""
-    if strength <= 0:
+class FillBackground(BlurBackground):
+    """Same matte pipeline, but the background is a fill provider (colour,
+    image or looping video) instead of a blur — a digital green screen."""
+
+    def __init__(self, matter, fill_fn, refine: bool = True, alt_matter=None, use_alt=None):
+        super().__init__(matter, 0.0, refine, alt_matter, use_alt)
+        self.fill_fn = fill_fn
+
+    def _bg(self, i: int, frame: np.ndarray) -> np.ndarray:
+        return self.fill_fn(i, frame).astype(np.float32)
+
+
+def _cover(img: np.ndarray, out_w: int, out_h: int) -> np.ndarray:
+    """Scale to cover the output and centre-crop — no letterboxing."""
+    import cv2
+    sc = max(out_w / img.shape[1], out_h / img.shape[0])
+    img = cv2.resize(img, (int(img.shape[1] * sc + 0.5), int(img.shape[0] * sc + 0.5)),
+                     interpolation=cv2.INTER_AREA if sc < 1.0 else cv2.INTER_LANCZOS4)
+    x0 = max(0, (img.shape[1] - out_w) // 2)
+    y0 = max(0, (img.shape[0] - out_h) // 2)
+    return img[y0:y0 + out_h, x0:x0 + out_w]
+
+
+class ColorFill:
+    """Solid colour backdrop — pick #00b140 for a classic green screen."""
+
+    def __init__(self, hex_color: str, out_w: int, out_h: int):
+        h = hex_color.lstrip("#")
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        self.bg = np.full((out_h, out_w, 3), (b, g, r), np.uint8)
+
+    def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
+        return self.bg
+
+
+class ImageFill:
+    """Still image backdrop, cover-fitted once."""
+
+    def __init__(self, path: str, out_w: int, out_h: int):
+        import cv2
+        img = cv2.imread(path)
+        if img is None:
+            raise IOError(tr("unreadable background image: %s") % path)
+        self.bg = _cover(img, out_w, out_h)
+
+    def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
+        return self.bg
+
+
+class VideoFill:
+    """Looping background video, decoded per frame.
+
+    Source fps is honoured (``rate``), playback loops; when the frame index
+    jumps (preview scrubs or a new render pass) it seeks instead of reading
+    sequentially."""
+
+    def __init__(self, path: str, out_w: int, out_h: int, fps: float = 25.0):
+        import cv2
+        self.cap = cv2.VideoCapture(path)
+        if not self.cap.isOpened():
+            raise IOError(tr("unreadable background video: %s") % path)
+        self.out_w, self.out_h = out_w, out_h
+        self.n = max(1, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1)
+        self.rate = (self.cap.get(cv2.CAP_PROP_FPS) or 25.0) / fps
+        self._last = -1
+
+    def __call__(self, i: int, frame: np.ndarray) -> np.ndarray:
+        import cv2
+        src_i = int(i * self.rate)
+        if src_i != self._last + 1:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, src_i % self.n)
+        ok, img = self.cap.read()
+        if not ok:  # loop
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ok, img = self.cap.read()
+        self._last = src_i
+        if not ok:
+            return np.zeros((self.out_h, self.out_w, 3), np.uint8)
+        return _cover(img, self.out_w, self.out_h)
+
+
+def make_fill(mode: str, out_w: int, out_h: int, fps: float = 25.0,
+              color: str = "#00b140", image=None, video=None, log=print):
+    """Fill provider for ``mode`` — ``None`` means fall back to blur."""
+    try:
+        if mode == "color":
+            return ColorFill(color, out_w, out_h)
+        if mode == "image" and image and os.path.exists(image):
+            return ImageFill(image, out_w, out_h)
+        if mode == "video" and video and os.path.exists(video):
+            return VideoFill(video, out_w, out_h, fps)
+    except IOError as exc:
+        log("  %s" % exc)
+    return None
+
+
+def build(strength: float, engine: str = "rvm", progress=None, log=print,
+          size=None, fill: str = "blur", color: str = "#00b140",
+          image=None, video=None, fps: float = 25.0) -> Optional[BlurBackground]:
+    """Matte hook, downloading the model on first use. ``None`` on failure.
+
+    ``fill != "blur"`` composites the person over a colour/image/video
+    (``size`` is the (w, h) of the finished frame) — the green-screen path."""
+    if strength <= 0 and fill in ("blur", "off"):
         return None
     try:
+        matter = None
         if engine == "modnet":
             from .. import models
             if models.ensure("modnet", progress, log) is None:
                 return None
-            return BlurBackground(ModnetMatter(), strength)
-        if not rvm_available():
-            log(tr("Background blur: downloading the matting model (14 MB, once)…"))
-            download_rvm(progress)
-        return BlurBackground(Matter(), strength)
+            matter = ModnetMatter()
+        else:
+            if not rvm_available():
+                log(tr("Background blur: downloading the matting model (14 MB, once)…"))
+                download_rvm(progress)
+            matter = Matter()
+        if fill not in ("blur", "off") and size is not None:
+            fn = make_fill(fill, size[0], size[1], fps, color, image, video, log)
+            if fn is not None:
+                return FillBackground(matter, fn)
+        return BlurBackground(matter, strength)
     except Exception as exc:
         log(tr("  background blur unavailable (%s)") % exc)
         return None

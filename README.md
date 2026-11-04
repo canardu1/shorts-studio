@@ -101,6 +101,10 @@ The honest trade-off: cloud tools offer web editors, team features and zero inst
 - **Logo/watermark** + closing **CTA** card
 - **Progress bar** along the edge — the "watch to the end" cue
 - **Intro/outro cards** — full-frame brand images at the start and end
+
+### 🎬 Virtual studio
+- **Digital green screen** — cut the person out with the neural matte and drop them over a **solid colour**, an **image** or a **looping video**
+- Guided-filter matte refinement keeps hair and edges believable (RVM for speed, MODNet for quality)
 - **Thumbnails** that look like a creator made them — best expressive frame, cut-out subject, 4 styles, highlighted word
 - **Title, description and hashtags** drafted from the transcript
 

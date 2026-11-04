@@ -124,6 +124,12 @@ class JobSettings:
     """Matting engine for the background blur: ``rvm`` (fast, recurrent) or
     ``modnet`` (finer hair/edges, per-frame)."""
     """Blur strength behind the person (RVM matte); 0 = off."""
+    bg_fill: str = "blur"
+    """What replaces the backdrop: ``blur`` | ``color`` | ``image`` | ``video``.
+    Non-blur fills use the same matte even at bg_blur == 0 (green screen)."""
+    bg_color: str = "#00b140"
+    bg_image: Optional[str] = None
+    bg_video: Optional[str] = None
     encoder: str = "auto"
     """``auto`` (hardware on a Mac when available), ``hardware`` or ``software``."""
     preset: str = "veryfast"
@@ -907,11 +913,13 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
                                        0.5 if split is not None else s.caption_pos, s.caption_style,
                                        second_words=second)
             hooks = []
-            if s.bg_blur > 0:
+            if s.bg_blur > 0 or s.bg_fill not in ("blur", "off"):
                 from .rvm import build as build_bg_blur
-                bg = build_bg_blur(s.bg_blur, s.bg_engine, step(tr("Background blur")), log)
+                bg = build_bg_blur(s.bg_blur, s.bg_engine, step(tr("Background blur")), log,
+                                   size=(out_w, out_h), fill=s.bg_fill, color=s.bg_color,
+                                   image=s.bg_image, video=s.bg_video, fps=fps)
                 if bg is not None:
-                    hooks.append(bg)          # blur first: don't soften captions/overlays
+                    hooks.append(bg)          # matte first: don't soften captions/overlays
             if burner is not None:
                 hooks.append(burner)
             if ov is not None:

@@ -64,6 +64,46 @@ def test_overlays_progress_and_cards(tmp_path):
     assert early > 0 and late > early
 
 
+def test_fill_background_modes(tmp_path):
+    import cv2
+    from face_reframe.app import rvm
+
+    class FakeMatter:                      # person mask = left half
+        def reset(self):
+            pass
+
+        def __call__(self, img):
+            m = np.zeros(img.shape[:2], np.float32)
+            m[:, :img.shape[1] // 2] = 1.0
+            return m
+
+    frame = np.zeros((100, 200, 3), np.uint8)
+
+    fill = rvm.ColorFill("#ff0000", 200, 100)                 # green-screen style colour
+    fb = rvm.FillBackground(FakeMatter(), fill, refine=False)
+    out = fb(0, frame)
+    assert out[:, :100, 2].mean() < 20       # person side: the frame shows through
+    assert out[:, 150:, 2].mean() > 200      # backdrop side: solid red
+
+    img = np.full((50, 400, 3), (0, 255, 0), np.uint8)         # wide image -> cover-cropped
+    ip = str(tmp_path / "bg.png")
+    cv2.imwrite(ip, img)
+    fb = rvm.FillBackground(FakeMatter(), rvm.ImageFill(ip, 200, 100), refine=False)
+    out = fb(0, frame)
+    assert out[:, 150:, 1].mean() > 200 and out[:, 150:, 2].mean() < 30
+
+    vw = cv2.VideoWriter(str(tmp_path / "bg.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), 25, (64, 64))
+    for k in range(6):
+        vw.write(np.full((64, 64, 3), (0, 0, 40 * k), np.uint8))
+    vw.release()
+    vf = rvm.VideoFill(str(tmp_path / "bg.mp4"), 200, 100, 25.0)
+    a, b = vf(0, frame), vf(5, frame)                         # sequential reads advance
+    assert a.shape == (100, 200, 3) and not np.array_equal(a, b)
+    vf(2, frame)                                              # backward jump -> seek, no crash
+
+    assert rvm.make_fill("blur", 200, 100) is None            # blur mode -> no fill provider
+
+
 def test_look_tables():
     rng = np.random.default_rng(0)
     img = rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)
