@@ -205,7 +205,10 @@ def source_frames(n_out: int, fps: float, spans: Optional[List[Span]], offset_f:
     if not spans:
         return offset_f + np.arange(n_out)
     tm = TimeMap(spans)
-    return np.array([offset_f + int(round(tm.inverse(i / fps) * fps)) for i in range(n_out)])
+    t_out = np.arange(n_out) / fps
+    k = np.clip(np.searchsorted(tm.offs, t_out, side="right") - 1, 0, len(spans) - 1)
+    starts = np.array([a for a, _ in spans])
+    return offset_f + np.round((starts[k] + (t_out - np.asarray(tm.offs)[k])) * fps).astype(int)
 
 
 def remap_words(words, spans: List[Span]):

@@ -346,28 +346,29 @@ def analyze_video(
     embed_every = max(1, int(round(0.5 * fps / max(1, stride))))
     is_cut = CutDetector(hist_threshold=cut_threshold)
     samples: List[FrameSample] = []
-    pending_cut = False
     prev_gray = None
     prev_faces: List[Face] = []
     n = 0
     try:
         for i, frame in enumerate(iter_frames(cap, start_frame, frame_count)):
             n = i + 1
-            if is_cut(frame):
-                pending_cut = True
-            if i % stride == 0 or pending_cut:
+            if i % stride == 0:
+                # cut detection only on sampled frames: ~40% of the frame
+                # pump's cost, and a cut landing between samples is caught
+                # by the next one anyway (segments shift by <=1 sample)
+                cut = is_cut(frame)
                 faces = detector.detect(frame)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 for f in faces:
                     f.sig = appearance(frame, f)
-                if embedder.available and (pending_cut or len(samples) % embed_every == 0):
+                if embedder.available and (cut or len(samples) % embed_every == 0):
                     for f in faces:
                         f.emb = embedder(frame, f)
-                if prev_gray is not None and not pending_cut:
+                if prev_gray is not None and not cut:
                     for f in faces:
                         f.mouth = mouth_activity(f, gray, prev_gray, _same_face(f, prev_faces))
                 prev_faces = faces
-                smp = FrameSample(i, faces, cut=pending_cut)
+                smp = FrameSample(i, faces, cut=cut)
                 if not faces and saliency is not None:
                     try:
                         smp.salient = saliency(frame)
@@ -375,7 +376,6 @@ def analyze_video(
                         smp.salient = None
                 samples.append(smp)
                 prev_gray = gray
-                pending_cut = False
             if progress and frame_count < 10**9 and i % 25 == 0:
                 progress(min(1.0, i / float(frame_count)))
     finally:
