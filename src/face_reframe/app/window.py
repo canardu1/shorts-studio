@@ -275,6 +275,15 @@ def section(text):
     return lab
 
 
+def _duotone(bgr: np.ndarray) -> np.ndarray:
+    """Map a frame's luminance onto the ink→coral ramp. Interface thumbnails
+    wear the app's palette so the preview stays the only full-colour thing."""
+    lum = (0.114 * bgr[..., 0] + 0.587 * bgr[..., 1] + 0.299 * bgr[..., 2]) / 255.0
+    lo = np.array([14, 11, 11], np.float32)      # BGR of #0b0b0e
+    hi = np.array([109, 77, 255], np.float32)    # BGR of #ff4d6d
+    return np.clip(lo + (hi - lo) * lum[..., None], 0, 255).astype(np.uint8)
+
+
 def _fmt(sec: float) -> str:
     sec = int(sec)
     return "%02d:%02d" % (sec // 60, sec % 60)
@@ -440,7 +449,7 @@ class MainWindow(QMainWindow):
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(14, 0, 10, 0)
         lay.setSpacing(0)
-        a = QLabel("SHORTS")
+        a = QLabel("Shorts")
         a.setObjectName("brand")
         b = QLabel("STUDIO")
         b.setObjectName("brandAlt")
@@ -681,6 +690,7 @@ class MainWindow(QMainWindow):
         self.ab_btn.setToolTip(tr("Held: you hear the original audio. Released: the audio as it will be exported (cinematic audio and music, if on)"))
         self.ab_btn.toggled.connect(self._ab_toggled)
         self.time_lab = QLabel("00:00 / 00:00")
+        self.time_lab.setObjectName("timecode")
         self.time_lab.setMinimumWidth(110)
         self.skip_cuts = QCheckBox(tr("Skip cuts"))
         self.skip_cuts.setToolTip(tr("While playing, skip the parts that will be cut (in red)"))
@@ -3268,7 +3278,7 @@ class MainWindow(QMainWindow):
                 crop = frame[y0:int(f.cy + 1.2 * r), x0:int(f.cx + r)]
                 if crop.size:
                     crop = cv2.resize(crop, (112, 112), interpolation=cv2.INTER_AREA)
-                    btn.setIcon(QIcon(QPixmap.fromImage(to_qimage(crop))))
+                    btn.setIcon(QIcon(QPixmap.fromImage(to_qimage(_duotone(crop)))))
             secs = int(p.samples * analysis.frame_count / max(1, len(analysis.samples)) / fps)
             btn.setToolTip(tr("Person %d · in %d shots · ~%ds on screen") % (p.id + 1, len(p.tracks), secs))
             self.people_group.addButton(btn, p.id)
@@ -4101,14 +4111,17 @@ STYLE = """
 /* ---------- base ---------- */
 QWidget { font-size: 13px; color: #f0f0f4; }
 QFrame#header { background: #08080a; border-bottom: 1px solid rgba(255, 77, 109, 45); }
-QLabel#brand { font-size: 13px; font-weight: 800; color: #f0f0f4; }
-QLabel#brandAlt { font-size: 13px; font-weight: 800; color: #ff4d6d; }
+QLabel#brand { font-family: "Didot", "Baskerville", "Palatino", Georgia, serif;
+               font-size: 17px; font-weight: 600; color: #f0f0f4; padding-right: 5px; }
+QLabel#brandAlt { font-size: 12px; font-weight: 800; color: #ff4d6d; letter-spacing: 2px;
+                  padding-top: 2px; }
 QWidget#panel { background: #0f0f13; }
 QWidget#previewPane { background: #0a0a0c; }
 QFrame#ctlcard { background: #121216; border: 1px solid #22222a; border-radius: 12px; }
 QLabel#h1 { font-size: 12px; font-weight: 700; color: #9a9aa8; }
 QLabel#hint { color: #9494aa; font-size: 12px; }
 QLabel#status { color: #b6b6c2; font-weight: 600; }
+QLabel#timecode { font-family: "IBM Plex Mono", Menlo, monospace; font-size: 12px; color: #c7c7d4; }
 QLabel#status[err="true"] { color: #f5c542; }
 QLabel#section {
     color: #9a9aa8; font-size: 11px; font-weight: 700;
@@ -4262,7 +4275,7 @@ QScrollBar::add-page, QScrollBar::sub-page { background: none; }
 QSplitter::handle { background: #191920; }
 QSplitter::handle:hover { background: #ff4d6d; }
 QPlainTextEdit {
-    font-family: Menlo, Consolas, monospace; font-size: 11px; color: #9a9aa8;
+    font-family: "IBM Plex Mono", Menlo, Consolas, monospace; font-size: 11px; color: #9a9aa8;
     background: #0c0c0f; border: 1px solid #202027; border-radius: 8px; padding: 6px;
 }
 QFrame#bottom { background: #101014; border-top: 1px solid #22222a; }
@@ -4467,7 +4480,7 @@ def apply_theme(app: QApplication):
                     except OSError:
                         continue
                     fams = QFontDatabase.applicationFontFamilies(fid)
-                    if fams:
+                    if fams and "Manrope" in fams[0]:
                         app.setFont(QFont(fams[0]))
             break
     pal = QPalette()

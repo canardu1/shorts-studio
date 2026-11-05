@@ -47,3 +47,4 @@ If you use Shorts Studio commercially, pick **GFPGAN** (or "off") for face resto
 | FFmpeg | LGPL-2.1+ / GPL-2.0+ depending on the build |
 | scikit-image (tests only) | BSD-3-Clause |
 | Manrope (UI font, `app/fonts/Manrope-VF.ttf`) | SIL Open Font License 1.1 — [googlefonts/manrope](https://github.com/googlefonts/manrope) |
+| IBM Plex Mono (timecode/log font, `app/fonts/IBMPlexMono-*.ttf`) | SIL Open Font License 1.1 — [IBM/plex](https://github.com/IBM/plex) |

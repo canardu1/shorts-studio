@@ -43,7 +43,7 @@ typography:
     fontSize: "11px"
     fontWeight: 400
   mono:
-    fontFamily: "Menlo, Consolas, monospace"
+    fontFamily: "IBM Plex Mono, Menlo, Consolas, monospace"
     fontSize: "11px"
     fontWeight: 400
 rounded:
@@ -146,9 +146,12 @@ coral-tinted darks (`tint-*`), never solid coral fills behind dark text.
 
 ## Typography
 
-**Display/Body Font:** Manrope (embedded variable weight, OFL — bundled in
-the app, packaged in the PyInstaller spec)
-**Mono Font:** Menlo (system) — log output only
+**Body Font:** Manrope (embedded variable weight, OFL — bundled in the app,
+packaged in the PyInstaller spec)
+**Display Font:** Didot (macOS system serif; falls back Baskerville → Palatino →
+Georgia). Used ONLY for the "Shorts" wordmark — the masthead voice.
+**Mono Font:** IBM Plex Mono (embedded, OFL) — the timecode and the log.
+Timecodes in a real mono are the quiet signature of a proper NLE.
 
 **Character:** A single geometric grotesque at humane sizes. Weight and
 size steps do the work; there is no second voice.
@@ -159,11 +162,16 @@ size steps do the work; there is no second voice.
 - **Body** (400, 12px): controls, list items, buttons.
 - **Label** (700, 11px, tracked +0.06em): tab names, field labels.
 - **Hint** (400, 11px, `text-faint`): explainer blocks under dense settings.
-- **Mono** (400, 11px): the render log — measurement data, not a tech costume.
+- **Mono** (400, 11–12px): the transport timecode and the render log —
+  measurement data, not a tech costume.
 
 ### Named Rules
 **The Two-Size Rule.** UI lives at 11–13px. Anything larger must earn it
-(the preview and the Create button do; nothing else has yet).
+(the preview, the wordmark, and the Create button do; nothing else has yet).
+
+**The Three Voices Rule.** Manrope speaks to the user, Plex Mono reads the
+machine, Didot says the name. Nothing else is allowed a fourth voice —
+and Didot never leaves the wordmark.
 
 ## Layout
 
@@ -215,6 +223,14 @@ controls are pill groups on an `ink-raise` track; the active segment is an
   the rail pill is the only accent-dyed tab.
 - Must elide or wrap within the panel — overflow clipping is a defect.
 
+### Interface Thumbnails — the duotone rule
+Frames rendered as *chrome* (the people-pick strip, any non-preview
+thumbnail) are converted to the ink→coral duotone (`_duotone`): luminance
+mapped onto `#0b0b0e`→`#ff4d6d`. The preview stays the only full-colour
+thing in the window — the signature move of the whole system. Never
+duotone anything that previews actual output (crop preview, thumbnail
+composer, social preview): those must show true colours.
+
 ### List Items (queue)
 - Default: transparent, `text-primary`, `○` status mark prefix.
 - Selected: `tint-selected` surface + 3px coral bar at the leading edge.
@@ -257,3 +273,5 @@ controls are pill groups on an `ink-raise` track; the active segment is an
 - **Don't** put borders above 1px or offset shadows on cards — depth is
   tonal layering, not chrome.
 - **Don't** grow the type past 13px for chrome; the preview is the display.
+- **Don't** show a full-colour frame as interface chrome — duotone it.
+- **Don't** reach for a fourth typeface, ever.
