@@ -855,4 +855,5 @@ _IT = {
     "Remove %s": "Rimuovi %s",
     "%d items": "%d elementi",
     "Add at least one video.": "Aggiungi almeno un video.",
+    "Preview: face restore": "Anteprima: restauro volti",
 }

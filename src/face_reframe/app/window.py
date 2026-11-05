@@ -2759,7 +2759,7 @@ class MainWindow(QMainWindow):
 
         def job(progress):
             from ..saliency import LazySaliency, backfill
-            sal = LazySaliency(lambda *_: None, progress)
+            sal = LazySaliency(self.log_sig.emit, None)
             backfill(path, analysis, sal, progress)
             return sal.ok
 
@@ -2820,7 +2820,7 @@ class MainWindow(QMainWindow):
         """Restore the shown frame in the background; only the latest request
         survives while one is running (scrubbing doesn't queue up work)."""
         self._restore_pending = (i, out.copy(), self._restore_key())
-        if not self._busy(tr("Face restoration")):
+        if not self._busy(tr("Preview: face restore")):
             self._start_restore()
 
     def _start_restore(self):
@@ -2848,7 +2848,7 @@ class MainWindow(QMainWindow):
             elif fi == self.slider.value() and not self.play_timer.isActive():
                 self._present(fi, img, tr("Face restored"))
 
-        self._run(job, done, tr("Face restoration"))
+        self._run(job, done, tr("Preview: face restore"))
 
     def _refresh_frame(self, *_):
         self._show_frame(self.slider.value())
@@ -3144,7 +3144,9 @@ class MainWindow(QMainWindow):
             sal = None
             if opts.track.noface == "object" or opts.track.subject == "object":
                 from ..saliency import LazySaliency
-                sal = LazySaliency(lambda *_: None, progress)
+                # download progress goes to the log, not the bar: sharing the
+                # bar rewound it mid-analysis and looked like it was skipping
+                sal = LazySaliency(self.log_sig.emit, None)
             return path, analyze_video(path, 0, None, stride=opts.stride, min_score=opts.min_score,
                                        progress=progress, saliency=sal)
 

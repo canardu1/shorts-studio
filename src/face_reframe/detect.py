@@ -428,7 +428,7 @@ def analyze_video(
                 buf = []
             else:
                 buf.append(frame)
-            if progress and frame_count < 10**9 and i % 25 == 0:
+            if progress and frame_count < 10**9 and i % 10 == 0:
                 progress(min(1.0, i / float(frame_count)))
     finally:
         cap.release()
