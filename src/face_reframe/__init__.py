@@ -1,7 +1,7 @@
 """Face-centred automatic reframing for DaVinci Resolve (a Smart Reframe alternative)."""
 
 __all__ = ["CropPlan", "plan_crops", "parse_aspect", "TrackSettings", "build_camera_path"]
-__version__ = "0.1.0"
+__version__ = "0.7.1"
 
 
 def __getattr__(name):

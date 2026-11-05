@@ -8,6 +8,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import re
 import sys
 import time
 import threading
@@ -29,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from ..cinematic import CinematicParams
 from ..enhance import EnhanceOptions
-from .. import i18n
+from .. import i18n, __version__
 from ..i18n import tr
 from ..pipeline import Options
 from ..silence import SpeechParams
@@ -40,6 +41,14 @@ from .preview import FrameView, VideoReader, to_qimage
 from .timeline import Timeline
 
 APP_NAME = "Shorts Studio"
+
+
+def _newer(tag: str, cur: str) -> bool:
+    """Semantic-ish version compare: "0.8.0" > "0.7.1"."""
+    def tup(s):
+        v = [int(x) for x in re.findall(r"\d+", s)[:3]]
+        return tuple(v + [0] * (3 - len(v)))
+    return tup(tag) > tup(cur)
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".m4v", ".avi", ".mxf", ".webm", ".mts"}
 AUDIO_EXT = "*.mp3 *.wav *.m4a *.aac *.flac *.ogg"
 ASPECTS = ["9:16", "4:5", "1:1", "16:9"]
@@ -274,6 +283,7 @@ def _extract_wav(src: str, out: str):
 
 class MainWindow(QMainWindow):
     log_sig = Signal(str)   # thread-safe log from worker threads
+    upd_sig = Signal(object)  # (tag, url) or None from the update-check thread
 
     def __init__(self):
         super().__init__()
@@ -390,6 +400,8 @@ class MainWindow(QMainWindow):
         self._load_settings()
         self._sync_undo()
         QTimer.singleShot(400, self._offer_restore)
+        QTimer.singleShot(2000, self._check_updates)
+        self.upd_sig.connect(self._update_available)
         for wd in self.w.values():
             sig = None
             if isinstance(wd, (QDoubleSpinBox, QSpinBox)):
@@ -480,9 +492,72 @@ class MainWindow(QMainWindow):
             sm.addAction(a)
         grp.actions()[0].setChecked(True)
         grp.triggered.connect(lambda a: self._set_zones(a.data()))
+        m.addSeparator()
+        self._act(m, "Check for updates", lambda: self._check_updates(manual=True))
+        a = self._act(m, "Check for updates automatically",
+                      lambda: self._save_settings(), checkable=True)
+        a.setChecked(QSettings("ShortsStudio", "ShortsStudio").value("update_check", "1") == "1")
+        a.toggled.connect(lambda on: QSettings("ShortsStudio", "ShortsStudio")
+                          .setValue("update_check", "1" if on else "0"))
+        self._upd_auto = a
 
     def _set_zones(self, key):
         self._zones = key
+
+    # ---------------------------------------------------------- updates
+    _RELEASES = "https://api.github.com/repos/canardu1/shorts-studio/releases/latest"
+
+    def _check_updates(self, manual=False):
+        self._upd_manual = manual
+        st = QSettings("ShortsStudio", "ShortsStudio")
+        if not manual and st.value("update_check", "1") != "1":
+            return
+        if manual:
+            self._log(tr("Checking for updates…"))
+
+        def work():
+            try:
+                import urllib.request
+                req = urllib.request.Request(self._RELEASES,
+                                             headers={"User-Agent": "ShortsStudio",
+                                                      "Accept": "application/vnd.github+json"})
+                with urllib.request.urlopen(req, timeout=6) as r:
+                    rel = json.loads(r.read().decode())
+                tag = str(rel.get("tag_name") or "").lstrip("v")
+                if tag and _newer(tag, __version__):
+                    return (tag, rel.get("html_url") or
+                            "https://github.com/canardu1/shorts-studio/releases")
+            except Exception:
+                pass
+            return None
+
+        threading.Thread(target=lambda: self.upd_sig.emit(work()), daemon=True).start()
+
+    def _update_available(self, res):
+        if res is None:
+            if self._upd_manual:
+                self._log(tr("You're on the latest version (%s)") % __version__)
+            return
+        tag, url = res
+        if not self._upd_manual and \
+                QSettings("ShortsStudio", "ShortsStudio").value("update_skip") == tag:
+            return
+        self._upd_url = url
+        self._upd_tag = tag
+        self.upd_btn.setText("⬆ v%s" % tag)
+        self.upd_btn.setToolTip(tr("Shorts Studio %s is out — click to download") % tag)
+        self.upd_btn.setVisible(True)
+        self.upd_close.setVisible(True)
+
+    def _open_update(self):
+        QDesktopServices.openUrl(QUrl(getattr(self, "_upd_url",
+                                              "https://github.com/canardu1/shorts-studio/releases")))
+
+    def _dismiss_update(self):
+        self.upd_btn.setVisible(False)
+        self.upd_close.setVisible(False)
+        QSettings("ShortsStudio", "ShortsStudio").setValue("update_skip",
+                                                         getattr(self, "_upd_tag", ""))
         self._refresh_frame()
 
     def _build_queue(self):
@@ -528,6 +603,18 @@ class MainWindow(QMainWindow):
         hl_sem.setToolTip(tr("A small local AI model reads each suggested clip and penalises ones that "
                              "start mid-discussion or switch topic halfway"))
         lay.addWidget(hl_sem)
+        hl_spk = self.w["hl_speaker"] = QCheckBox(tr("Label moments by speaker (~84 MB, once)"))
+        hl_spk.setToolTip(tr("ECAPA voice ID tags each suggested clip with who's talking — "
+                             "then you can filter the list to a single voice"))
+        lay.addWidget(hl_spk)
+        spk_row = QHBoxLayout()
+        spk_row.addWidget(QLabel(tr("Show moments of:")))
+        self.hl_filter = QComboBox()
+        self.hl_filter.addItem(tr("Everyone"), None)
+        self.hl_filter.activated.connect(self._speaker_filter)
+        spk_row.addWidget(self.hl_filter, 1)
+        lay.addLayout(spk_row)
+        self._hl_filter_src = None
         return box
 
     def _build_preview(self):
@@ -1214,6 +1301,19 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self._stop)
         row.addWidget(self.stage_lab)
+        self.upd_btn = QPushButton()
+        self.upd_btn.setObjectName("updateLink")
+        self.upd_btn.setFlat(True)
+        self.upd_btn.setCursor(Qt.PointingHandCursor)
+        self.upd_btn.setVisible(False)
+        self.upd_btn.clicked.connect(self._open_update)
+        row.addWidget(self.upd_btn)
+        self.upd_close = QToolButton()
+        self.upd_close.setText("✕")
+        self.upd_close.setVisible(False)
+        self.upd_close.setToolTip(tr("Don't show this version again"))
+        self.upd_close.clicked.connect(self._dismiss_update)
+        row.addWidget(self.upd_close)
         row.addWidget(self.bar, 1)
         row.addWidget(self.start_btn)
         row.addWidget(self.stop_btn)
@@ -1817,7 +1917,7 @@ class MainWindow(QMainWindow):
             self.add_files([d])
 
     def _update_count(self):
-        n = self.queue.count()
+        n = sum(1 for i in range(self.queue.count()) if not self.queue.item(i).isHidden())
         self.drop_hint.setVisible(n == 0)
         self.start_btn.setText(tr("Create short") if n <= 1 else tr("Create %d shorts") % n)
 
@@ -2992,6 +3092,31 @@ class MainWindow(QMainWindow):
         self._finish_highlights(src, words, None)
 
     def _finish_highlights(self, src, words, events):
+        key = os.path.abspath(src["path"])
+        if self._voice.get(key) is None and self._val("hl_speaker"):
+            self._log(tr("Listening for who is speaking (ECAPA)…"))
+            speech = SpeechParams(vad=self._val("speech_engine") != "db",
+                                  min_pause=self._val("min_pause"), padding=self._val("padding"),
+                                  margin_db=self._val("margin_db"))
+
+            def job(progress):
+                from ..silence import extract_audio, speech_intervals
+                from ..speakerid import analyze
+                pcm = self.pcm.get(key)
+                if pcm is None:
+                    pcm = extract_audio(src["path"])
+                return analyze(pcm, speech_intervals(pcm, speech), lambda *_: None, progress)
+
+            def done(vsegs):
+                self._voice[key] = vsegs or []
+                self._find_moments(src, words, events)
+
+            self._run(job, done, tr("Voice identification"),
+                      on_fail=lambda _e: self._find_moments(src, words, events))
+            return
+        self._find_moments(src, words, events)
+
+    def _find_moments(self, src, words, events):
         from .highlights import find_highlights
         dur = self.reader.count / self.reader.fps if self.reader and self.current == src["path"] else words[-1].end
         n = self.hl_count.value()
@@ -3020,14 +3145,50 @@ class MainWindow(QMainWindow):
                    or self.queue.item(i).data(Qt.UserRole) == src)
         base = os.path.splitext(os.path.basename(src["path"]))[0]
         n_existing = sum(1 for d in self._items() if d.get("clip") and d["path"] == src["path"])
+        vsegs = self._voice.get(os.path.abspath(src["path"])) or []
+        order = {}
+        for _, _, s in vsegs:
+            if s >= 0 and s not in order:
+                order[s] = len(order) + 1
+
+        def speaker_of(t0, t1):
+            acc = {}
+            for a, b, s in vsegs:
+                if s >= 0:
+                    ov = min(b, t1) - max(a, t0)
+                    if ov > 0:
+                        acc[s] = acc.get(s, 0) + ov
+            return order.get(max(acc, key=acc.get)) if acc else None
+
+        present = []
         for k, h in enumerate(hls, 1 + n_existing):
+            spk = speaker_of(h.start, h.end)
+            if spk and spk not in present:
+                present.append(spk)
             title = h.title if len(h.title) <= 38 else h.title[:36] + "…"
+            tag = "  👤%d" % spk if spk else ""
             self._add_item({"path": src["path"], "clip": (h.start, h.end), "stem": "%s_clip%d" % (base, k),
-                            "score": min(99, int(round(h.score * 20))),
-                            "label": "   ↳ %s–%s  🔥%d  %s" % (_fmt(h.start), _fmt(h.end),
-                                                            min(99, int(round(h.score * 20))), title)},
+                            "score": min(99, int(round(h.score * 20))), "speaker": spk,
+                            "label": "   ↳ %s–%s  🔥%d%s  %s" % (_fmt(h.start), _fmt(h.end),
+                                                              min(99, int(round(h.score * 20))), tag, title)},
                            row + k - n_existing)
+        self._hl_filter_src = src["path"]
+        self.hl_filter.clear()
+        self.hl_filter.addItem(tr("Everyone"), None)
+        for n in sorted(present):
+            self.hl_filter.addItem(tr("Speaker %d") % n, n)
+        self.hl_filter.setEnabled(len(present) > 1)
+        self._speaker_filter(0)
         self._log(tr("Found %d moments in %s: they're in the list under the video") % (len(hls), src["label"]))
+        self._update_count()
+
+    def _speaker_filter(self, i):
+        want = self.hl_filter.itemData(i)
+        for r in range(self.queue.count()):
+            it = self.queue.item(r)
+            d = it.data(Qt.UserRole)
+            if d.get("clip") and d["path"] == self._hl_filter_src:
+                it.setHidden(want is not None and d.get("speaker") != want)
         self._update_count()
 
     # ---------------------------------------------------------- people
@@ -3774,7 +3935,8 @@ class MainWindow(QMainWindow):
 
     # ================================================================ batch
     def _start(self):
-        items = self._items()
+        items = [self.queue.item(i).data(Qt.UserRole) for i in range(self.queue.count())
+                 if not self.queue.item(i).isHidden()]
         if not items:
             QMessageBox.information(self, APP_NAME, tr("Add at least one video."))
             return
