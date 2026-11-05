@@ -23,6 +23,15 @@ colors:
   success: "#00b140"
   warn: "#f5c542"
   pick-yellow: "#FFD400"
+  rail-crop: "#4ade80"
+  rail-cut: "#22d3ee"
+  rail-captions: "#f5c542"
+  rail-audio: "#818cf8"
+  rail-quality: "#2dd4bf"
+  rail-effects: "#e879f9"
+  rail-color: "#ff8a3d"
+  rail-brand: "#f472b6"
+  rail-export: "#ff4d6d"
 typography:
   body:
     fontFamily: "Manrope, sans-serif"
@@ -144,6 +153,11 @@ to ghost or a tint.
 **The Tint, Not Paint Rule.** Selection and hover states dye surfaces with
 coral-tinted darks (`tint-*`), never solid coral fills behind dark text.
 
+**The Spectrum Rail Rule.** The rail is the only multi-hue surface: each
+settings tab owns exactly one `rail-*` hue, expressed as icon, label and
+pill tint — never as a fill behind panel content. Inside a tab's page,
+that hue does not bleed: controls keep the neutral + coral system.
+
 ## Typography
 
 **Body Font:** Manrope (embedded variable weight, OFL — bundled in the app,
@@ -236,9 +250,13 @@ composer, social preview): those must show true colours.
 - Selected: `tint-selected` surface + 3px coral bar at the leading edge.
 - Data glyphs (`↳ 🔥 👤`) are content markers, allowed inline in labels.
 
-### Rail Tabs
-- 56px icon + 11px label column; checked = `tint-selected` pill + coral icon.
-- Icons are painted strokes, one weight, coral when active.
+### Rail Tabs — the spectrum rail
+- 56px icon + 11px label column; each tab OWNS one hue (`rail-*` tokens).
+  Off state = the tab's hue at 45% alpha; checked = full-hue icon, label and
+  pill tint (`rgba(hue, 36/255)`). Like Resolve's page bar — the rail is the
+  app's spectrum, the panel stays neutral.
+- Export keeps Signal Coral: it is the render action, same voice as
+  "Create short". This is the only place a second hue-family is structural.
 
 ### Inputs
 - `ink-raise` fill, `ink-edge` border, `rounded.sm`; focus swaps border to
@@ -269,7 +287,8 @@ composer, social preview): those must show true colours.
   panel — elide, wrap, or shorten the label.
 - **Don't** use `text-faint` for information the user needs to act on —
   hints explain, secondary text instructs.
-- **Don't** add a second accent hue for decoration; semantic colors only.
+- **Don't** add a second accent hue for decoration; semantic colors and the
+  rail hues only — the rail's spectrum lives only inside the rail.
 - **Don't** put borders above 1px or offset shadows on cards — depth is
   tonal layering, not chrome.
 - **Don't** grow the type past 13px for chrome; the preview is the display.

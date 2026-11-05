@@ -1262,9 +1262,11 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._page(f), "Export")
         return col
 
-    RAIL = [("crop", "Crop"), ("cut", "Cuts"), ("captions", "Captions"), ("audio", "Audio"),
-            ("quality", "Quality"), ("effects", "Effects"), ("color", "Color"),
-            ("brand", "Branding"), ("export", "Export")]
+    RAIL = [("crop", "Crop", "#4ade80"), ("cut", "Cuts", "#22d3ee"),
+            ("captions", "Captions", "#f5c542"), ("audio", "Audio", "#818cf8"),
+            ("quality", "Quality", "#2dd4bf"), ("effects", "Effects", "#e879f9"),
+            ("color", "Color", "#ff8a3d"), ("brand", "Branding", "#f472b6"),
+            ("export", "Export", "#ff4d6d")]
 
     def _build_rail(self, tabs):
         w = QWidget()
@@ -1274,11 +1276,14 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(4, 10, 4, 10)
         lay.setSpacing(3)
         self._rail_btns = []
-        for i, (icon, name) in enumerate(self.RAIL):
+        for i, (icon, name, accent) in enumerate(self.RAIL):
             b = QToolButton()
             b.setCheckable(True)
             b.setObjectName("railBtn")
-            b.setIcon(_rail_icon(icon))
+            b.setIcon(_rail_icon(icon, accent))
+            c = QColor(accent)
+            b.setStyleSheet("QToolButton:checked { color: %s; background: rgba(%d, %d, %d, 36); }"
+                            % (accent, c.red(), c.green(), c.blue()))
             b.setIconSize(QSize(19, 19))
             b.setText(tr(name))
             b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
@@ -4415,11 +4420,13 @@ def _icon(kind: str) -> QIcon:
     return QIcon(_pixmap(kind, "#c7c7c7"))
 
 
-def _rail_icon(kind: str) -> QIcon:
-    """Two-state icon: muted normally, accent when the rail tab is active."""
+def _rail_icon(kind: str, accent: str = "#ff8fa3") -> QIcon:
+    """Two-state icon: the tab's own hue at half alpha normally, full when active."""
     ic = QIcon()
-    ic.addPixmap(_pixmap(kind, "#8b8b98"), QIcon.Normal, QIcon.Off)
-    ic.addPixmap(_pixmap(kind, "#ff8fa3"), QIcon.Normal, QIcon.On)
+    dim = QColor(accent)
+    dim.setAlphaF(0.45)
+    ic.addPixmap(_pixmap(kind, dim.name(QColor.HexArgb)), QIcon.Normal, QIcon.Off)
+    ic.addPixmap(_pixmap(kind, accent), QIcon.Normal, QIcon.On)
     return ic
 
 
