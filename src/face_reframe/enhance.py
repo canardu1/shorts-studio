@@ -61,6 +61,21 @@ def _unsharp(img, amount: float, sigma: float):
     return cv2.addWeighted(img, 1.0 + amount, blur, -amount, 0)
 
 
+def _lock_colour(ai, ref):
+    """Match the AI output's coarse colour to the plain-upscaled source, per
+    Y/Cr/Cb channel. The network keeps the detail it adds but can't drift the
+    palette (or flicker it frame to frame — the reference is stable)."""
+    import numpy as np
+    cv2 = _cv2()
+    ya = cv2.cvtColor(ai, cv2.COLOR_BGR2YCrCb).astype(np.float32)
+    yr = cv2.cvtColor(ref, cv2.COLOR_BGR2YCrCb).astype(np.float32)
+    for c in range(3):
+        a, r = ya[..., c], yr[..., c]
+        sa, sr = float(a.std()), float(r.std())
+        ya[..., c] = (a - float(a.mean())) * min(2.0, sr / max(1e-3, sa)) + float(r.mean())
+    return cv2.cvtColor(np.clip(ya, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2BGR)
+
+
 def _face_rect(face: Tuple[float, float], out_w: int, out_h: int
                ) -> Tuple[int, int, int, int]:
     """Soft box around the face: generous region (face + hair + shoulders)."""
@@ -141,9 +156,10 @@ class Enhancer:
                            cv2.COLOR_RGB2BGR)
         down = bgr.shape[1] > out_w
         ai = cv2.resize(bgr, (out_w, out_h), interpolation=cv2.INTER_AREA if down else cv2.INTER_LANCZOS4)
+        plain = cv2.resize(crop, (out_w, out_h), interpolation=cv2.INTER_LANCZOS4)
+        ai = _lock_colour(ai, plain)
         if o.ai_strength >= 1.0:
             return ai
-        plain = cv2.resize(crop, (out_w, out_h), interpolation=cv2.INTER_LANCZOS4)
         return cv2.addWeighted(ai, o.ai_strength, plain, 1.0 - o.ai_strength, 0)
 
     def __call__(self, crop, out_w: int, out_h: int,

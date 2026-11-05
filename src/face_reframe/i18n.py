@@ -51,6 +51,26 @@ _IT = {
     "  sentence embeddings unavailable (%s)":
         "  embedding delle frasi non disponibili (%s)",
     "Best moments": "Momenti migliori",
+    "Remove mains hum": "Rimuovi ronzio di rete",
+    "Detects the actual hum frequency (50/60 Hz ± drift) "
+    "and notches it + harmonics — for buzz from grounds, "
+    "AC units, old recordings":
+        "Rileva la frequenza reale del ronzio (50/60 Hz ± deriva) "
+        "e la taglia con le sue armoniche — per masse, condizionatori, "
+        "vecchie registrazioni",
+    "Before/after video…": "Video prima/dopo…",
+    "Before/after": "Prima/dopo",
+    "Create a short first — the comparison needs its output file.":
+        "Crea prima uno short — al confronto serve il file prodotto.",
+    "Output file not found: %s": "File prodotto non trovato: %s",
+    "✓ Comparison: %s": "✓ Confronto: %s",
+    "Save comparison": "Salva confronto",
+    "  normalised source reused": "  sorgente normalizzata riusata",
+    "  %s source: normalising once (deinterlace + CFR)…":
+        "  sorgente %s: normalizzo una volta sola (deinterlaccio + CFR)…",
+    "  normalise failed (%s) — using the source as is":
+        "  normalizzazione fallita (%s) — uso la sorgente com'è",
+    "interlaced": "interlacciata",
     "Open project…": "Apri progetto…",
     "Save project…": "Salva progetto…",
     "Title, description & hashtags…": "Titolo, descrizione e hashtag…",

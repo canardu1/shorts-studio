@@ -309,6 +309,18 @@ def has_audio(path: str) -> bool:
     return "Audio:" in raw.stderr.decode(errors="replace")
 
 
+def _prevent_sleep():
+    """Keep the Mac awake while a job runs (long batches): ``-w <pid>`` makes
+    caffeinate exit with our process, so nothing leaks on a crash."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        return subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        return None
+
+
 def _ffmpeg(cmd: List[str], check: Callable[[], None], what: str) -> None:
     proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
     while True:
@@ -351,6 +363,22 @@ def render_cut(src: str, spans: List[Span], out: str, check: Callable[[], None])
     return out
 
 
+def compare_video(orig: str, produced: str, dst: str, check) -> str:
+    """Side-by-side before/after: the source left, the short right, both scaled
+    to 1080 high — the classic "what the app did" clip for social posts."""
+    from ..silence import find_ffmpeg
+    _ffmpeg([find_ffmpeg(), "-y", "-loglevel", "error",
+             "-i", produced, "-i", orig,
+             "-filter_complex",
+             "[1:v]scale=-2:1080[b];[0:v]scale=-2:1080[a];[b][a]hstack=inputs=2[v]",
+             "-map", "[v]", "-map", "0:a?",
+             "-c:v", "libx264", "-crf", "18", "-preset", "medium",
+             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+             "-shortest", dst],
+            check, "compare")
+    return dst
+
+
 def mix_music(video: str, music: str, out: str, music_db: float, ratio: float, check) -> str:
     """Loop ``music`` under the video's audio, ducked by the voice."""
     from ..silence import find_ffmpeg
@@ -375,15 +403,18 @@ def preview_audio(src: str, start: float, dur: float, s: JobSettings, out: str) 
     fmt = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
     chain = "anull"
     if s.cinematic:
-        from ..cinematic import audio_chain, measure_processed, noise_floor_db, speech_level_db
+        from ..cinematic import (audio_chain, hum_notches, measure_processed,
+                                 noise_floor_db, speech_level_db)
         from ..loudness import gain_db
         pcm = extract_audio(src, start, dur)
         floor, loud = noise_floor_db(pcm), speech_level_db(pcm)
+        hum = hum_notches(pcm, s.cinematic_params.hum_db)
         try:
-            gain = gain_db(measure_processed(src, start, dur, s.cinematic_params, floor, speech_db=loud))
+            gain = gain_db(measure_processed(src, start, dur, s.cinematic_params,
+                                             floor, speech_db=loud, hum=hum))
         except Exception:
             gain = 0.0
-        c = audio_chain(s.cinematic_params, floor, loud)
+        c = audio_chain(s.cinematic_params, floor, loud, hum)
         chain = "%s,volume=%.2fdB,alimiter=limit=%.2f" % (
             c, gain, min(1.0, max(0.06, s.cinematic_params.limiter))) if c else "volume=%.2fdB" % gain
     cmd = [find_ffmpeg(), "-y", "-loglevel", "error", "-ss", "%.3f" % start, "-t", "%.3f" % dur, "-i", src]
@@ -702,15 +733,17 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
     outs = [output_path(src, s, stem, a) for a in aspects]
     os.makedirs(os.path.dirname(outs[0]), exist_ok=True)
     work = tempfile.mkdtemp(prefix="shorts_")
+    awake = _prevent_sleep()
     try:
         src_dur, src_fps = media_info(src)
-        cur = src
+        from .normalize import normalise
+        cur = normalise(src, check, log)
         offset_f = 0
         if clip is not None:
             c0, c1 = max(0.0, clip[0]), min(src_dur or clip[1], clip[1])
             log(tr("Clip %s-%s") % (_ts(c0), _ts(c1)))
             step(tr("Trim"))(0.0)
-            cur = trim(src, c0, c1, os.path.join(work, "clip.mkv"), check)
+            cur = trim(cur, c0, c1, os.path.join(work, "clip.mkv"), check)
             offset_f = int(round(c0 * src_fps))
         duration, fps = media_info(cur)
 
@@ -1066,6 +1099,8 @@ def run_job(src: str, s: JobSettings, progress: Progress, log: Log,
         progress(tr("Done"), 1.0)
         return done
     finally:
+        if awake is not None:
+            awake.terminate()
         shutil.rmtree(work, ignore_errors=True)
 
 

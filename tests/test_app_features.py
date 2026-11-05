@@ -257,6 +257,93 @@ def test_highlights_embedder_fallback_and_nonoverlap():
         assert a.end <= b.start or b.end <= a.start
 
 
+def test_normalise_interlaced_and_vfr(tmp_path, monkeypatch):
+    """probe() flags interlaced/VFR; normalise() fixes both once, cached —
+    a clean CFR file is passed through untouched."""
+    from face_reframe.app.normalize import normalise, probe
+    from face_reframe.silence import find_ffmpeg
+    monkeypatch.setenv("SHORTS_STUDIO_CACHE", str(tmp_path / "cache"))
+    ff = find_ffmpeg()
+    interl = str(tmp_path / "i.mpg")
+    subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", "testsrc2=size=720x480:rate=29.97:duration=0.6",
+                    "-c:v", "mpeg2video", "-flags", "+ildct+ilme",
+                    interl], check=True)
+    vfr = str(tmp_path / "v.mkv")
+    subprocess.run([ff, "-y", "-loglevel", "error",
+                    "-f", "lavfi", "-i", "testsrc2=rate=30:duration=0.4:size=160x120",
+                    "-f", "lavfi", "-i", "testsrc2=rate=15:duration=0.4:size=160x120",
+                    "-filter_complex", "[0:v][1:v]concat=n=2:v=1",
+                    "-fps_mode", "vfr", vfr], check=True)
+    cfr = str(tmp_path / "c.mp4")
+    subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", "testsrc2=rate=25:duration=0.4:size=160x120", cfr], check=True)
+
+    assert probe(interl)["interlaced"] and not probe(interl)["vfr"]
+    assert probe(vfr)["vfr"]
+    assert not probe(cfr)["interlaced"] and not probe(cfr)["vfr"]
+
+    out_i = normalise(interl, lambda: None, lambda s: None)
+    assert out_i != interl and not probe(out_i)["interlaced"]
+    out_v = normalise(vfr, lambda: None, lambda s: None)
+    assert out_v != vfr and not probe(out_v)["vfr"]
+    assert normalise(cfr, lambda: None, lambda s: None) == cfr
+    # second call reuses the cached intermediate instead of re-encoding
+    assert normalise(interl, lambda: None, lambda s: None) == out_i
+
+
+def test_hum_notches_finds_mains_and_ignores_clean():
+    from face_reframe.cinematic import hum_notches
+    t = np.arange(16000 * 3) / 16000.0
+    hum = 0.05 * np.sin(2 * np.pi * 50 * t)
+    noisy = (hum + 0.02 * np.random.default_rng(0).standard_normal(len(t))).astype(np.float32)
+    notches = hum_notches(noisy, 24.0)
+    assert notches and "f=50" in notches[0]
+    clean = 0.02 * np.random.default_rng(1).standard_normal(len(t)).astype(np.float32)
+    assert hum_notches(clean, 24.0) == []
+    assert hum_notches(noisy, 0.0) == []
+
+
+def test_lock_colour_matches_source_palette():
+    import cv2
+    from face_reframe.enhance import _lock_colour
+    rng = np.random.default_rng(0)
+    ref = rng.integers(0, 256, (48, 64, 3), np.uint8)
+    ai = np.clip(ref.astype(int) + 40, 0, 255).astype(np.uint8)   # AI drifted bright
+    out = _lock_colour(ai, ref)
+    yc = lambda x: cv2.cvtColor(x, cv2.COLOR_BGR2YCrCb).astype(np.float32)
+    for c in range(3):
+        assert abs(float(yc(out)[..., c].mean()) - float(yc(ref)[..., c].mean())) < 4
+
+
+def test_restore_gate_rejects_tiny_and_profile():
+    import numpy as np
+    from face_reframe.restore import FaceRestorer
+    g = FaceRestorer._gate
+    lm = np.array([[300, 200], [360, 200], [330, 230], [315, 270], [345, 270]], np.float32)
+    assert g(None, lm, 1080)                      # frontal, eyes 60 px apart
+    assert not g(None, lm * 0.15, 1080)           # eyes ~9 px: a smear, not a face
+    prof = np.array([[300, 200], [360, 200], [355, 230], [340, 270], [350, 270]], np.float32)
+    assert not g(None, prof, 1080)                # nose by one eye: profile
+
+
+def test_compare_video_side_by_side(tmp_path):
+    import cv2
+    from face_reframe.app.jobs import compare_video
+    a, b = str(tmp_path / "a.mp4"), str(tmp_path / "b.mp4")
+    for p, w in ((a, 160), (b, 320)):
+        wr = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*"mp4v"), 10, (w, 120))
+        for i in range(12):
+            wr.write(np.full((120, w, 3), i * 10 % 255, np.uint8))
+        wr.release()
+    out = str(tmp_path / "cmp.mp4")
+    compare_video(a, b, out, lambda: None)
+    cap = cv2.VideoCapture(out)
+    w, h = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+    cap.release()
+    assert h == 1080 and w > 1080                 # two columns, source + short
+
+
 def test_diskcache_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("SHORTS_STUDIO_CACHE", str(tmp_path / "c"))
     f = tmp_path / "x.bin"

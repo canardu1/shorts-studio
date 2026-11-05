@@ -138,7 +138,7 @@ class FaceRestorer:
     """
 
     def __init__(self, key: str = "gpen256", fidelity: float = 0.7, blend: float = 0.8,
-                 max_faces: int = 2, min_face: int = 48, log=print):
+                 max_faces: int = 2, min_face: int = 48, tone: float = 0.6, log=print):
         import onnxruntime as ort
         from .detect import FaceDetector
         self.model = MODELS[key]
@@ -150,8 +150,9 @@ class FaceRestorer:
         self.inp = self.sess.get_inputs()[0].name
         self.fidelity, self.blend = float(fidelity), float(blend)
         self.max_faces, self.min_face = max_faces, min_face
+        self.tone = float(tone)
         self.detector = FaceDetector(min_score=0.6)
-        self._prev: List[np.ndarray] = []
+        self._prev: List[dict] = []   # {lm, w}: per-face state for the fade
         s = self.model.size
         mask = np.zeros((s, s), np.float32)
         # feather fully inside the square: the edge must reach exactly 0 or a
@@ -171,13 +172,19 @@ class FaceRestorer:
         y = (np.clip(y, -1.0, 1.0) + 1.0) * 127.5
         return y.transpose(1, 2, 0)[:, :, ::-1].astype(np.uint8)
 
-    def _smooth(self, lm: np.ndarray) -> np.ndarray:
-        """Average with the same face's landmarks in the previous frame."""
-        c = lm.mean(axis=0)
-        for p in self._prev:
-            if np.linalg.norm(p.mean(axis=0) - c) < 0.25 * np.linalg.norm(lm[0] - lm[1]) + 4:
-                return 0.5 * lm + 0.5 * p
-        return lm
+    def _gate(self, lm: np.ndarray, W: int) -> bool:
+        """Don't restore a face the camera never really captured — tiny or
+        profile ones get detail *invented* (the classic "glasses nobody wore").
+
+        Landmark order is [eye, eye, nose, mouth, mouth]: eyes closer than
+        ~12 px on a 640-wide frame is a smear, and the nose far off-centre
+        between the eyes means a profile view."""
+        eye = float(np.linalg.norm(lm[0] - lm[1]))
+        if eye < 0.019 * W:
+            return False
+        n = lm[2]
+        d0, d1 = abs(lm[0][0] - n[0]), abs(lm[1][0] - n[0])
+        return min(d0, d1) >= 0.28 * max(d0, d1)
 
     def __call__(self, frame: np.ndarray) -> np.ndarray:
         import cv2
@@ -189,13 +196,36 @@ class FaceRestorer:
         H, W = frame.shape[:2]
         s = self.model.size
         for f in faces[:self.max_faces]:
-            lm = self._smooth(np.array(f.landmarks, np.float32).reshape(5, 2))
-            cur.append(lm)
+            raw = np.array(f.landmarks, np.float32).reshape(5, 2)
+            c = raw.mean(axis=0)
+            prev = None
+            for p in self._prev:
+                if np.linalg.norm(p["lm"].mean(axis=0) - c) < 0.25 * np.linalg.norm(raw[0] - raw[1]) + 4:
+                    prev = p
+                    break
+            lm = raw if prev is None else 0.5 * raw + 0.5 * prev["lm"]
             M, _ = cv2.estimateAffinePartial2D(lm, self.template, method=cv2.LMEDS)
             if M is None:
+                cur.append({"lm": lm, "w": prev["w"] if prev is not None else 0.0})
                 continue
             crop = cv2.warpAffine(frame, M, (s, s), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+            # NB: no blur gate — restoring soft faces is the model's job here;
+            # size + yaw are what stop it from inventing features
+            ok = self._gate(lm, W)
+            # fade the restoration in/out instead of switching — a face that
+            # appears for a moment (or turns away) shouldn't pop
+            w = (prev["w"] if prev is not None else 0.0) + (0.14 if ok else -0.18)
+            w = min(self.blend, max(0.0, w))
+            cur.append({"lm": lm, "w": w})
+            if w < 0.04:
+                continue                    # faded out: skip the network run
             fixed = self._run(crop)
+            if self.tone > 0:
+                # keep the source's broad tones: the model only adds detail
+                sig = max(1.0, s * 0.03)
+                diff = (cv2.GaussianBlur(crop, (0, 0), sig).astype(np.float32)
+                        - cv2.GaussianBlur(fixed, (0, 0), sig).astype(np.float32))
+                fixed = np.clip(fixed.astype(np.float32) + diff * self.tone, 0, 255).astype(np.uint8)
             IM = cv2.invertAffineTransform(M)
             # paste back only inside the face's bounding box (much cheaper)
             corners = np.array([[0, 0, 1], [s, 0, 1], [0, s, 1], [s, s, 1]], np.float32) @ IM.T
@@ -208,7 +238,7 @@ class FaceRestorer:
             IMr[:, 2] -= (x0, y0)
             size = (x1 - x0, y1 - y0)
             paste = cv2.warpAffine(fixed, IMr, size, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-            m = cv2.warpAffine(self.mask, IMr, size, flags=cv2.INTER_LINEAR)[..., None] * self.blend
+            m = cv2.warpAffine(self.mask, IMr, size, flags=cv2.INTER_LINEAR)[..., None] * w
             if out is frame:
                 out = frame.copy()
             roi = out[y0:y1, x0:x1].astype(np.float32)

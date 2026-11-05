@@ -455,6 +455,8 @@ class MainWindow(QMainWindow):
         self._act(m, "Find the best moments", self._find_highlights)
         self._act(m, "Title, description & hashtags…", self._show_social)
         self._act(m, "Thumbnails…", self._open_thumbs)
+        m.addSeparator()
+        self._act(m, "Before/after video…", self._compare_video)
 
         m = mb.addMenu(tr("Playback"))
         self._act(m, "Play / Pause", self._toggle_play, "Space")
@@ -814,7 +816,12 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Noise reduction"), W["denoise"])
         f.addRow(tr("Denoise engine"), W["denoise_engine"])
         f.addRow(hint(tr("RNNoise is light and safe, Spectral adapts to the measured noise floor, DeepFilterNet (15 MB binary, downloaded once) is strongest on changing noise like traffic or crowds. The dB depth sets DeepFilterNet's attenuation limit.")))
+        W["hum"] = QCheckBox(tr("Remove mains hum"))
+        W["hum"].setToolTip(tr("Detects the actual hum frequency (50/60 Hz ± drift) "
+                               "and notches it + harmonics — for buzz from grounds, "
+                               "AC units, old recordings"))
         f.addRow(tr("De-reverb"), W["dereverb"])
+        f.addRow(W["hum"])
         f.addRow(tr("Warmth"), W["warmth"])
         f.addRow(tr("Presence"), W["presence"])
         f.addRow(tr("Air"), W["air"])
@@ -1292,7 +1299,8 @@ class MainWindow(QMainWindow):
             cinematic_params=CinematicParams(denoise_db=v("denoise"), denoise_engine=v("denoise_engine"),
                                              dereverb_db=v("dereverb"),
                                              warmth_db=v("warmth"), presence_db=v("presence"),
-                                             air_db=v("air")),
+                                             air_db=v("air"),
+                                             hum_db=24.0 if v("hum") else 0.0),
             music_path=self.music_path or None, music_db=v("music_db"), duck_ratio=v("duck"),
             subtitles=v("subtitles"), caption_style=v("caption_style"), language=v("language"),
             caption_words=int(v("caption_words")), caption_max_dur=v("caption_max_dur"),
@@ -1516,7 +1524,7 @@ class MainWindow(QMainWindow):
         # margin_db is the RMS speech threshold; breaths are always dB-based
         self.w["margin_db"].setEnabled(
             v("cut_breaths") or (v("cut_pauses") and v("speech_engine") == "db"))
-        for k in ("denoise", "denoise_engine", "dereverb", "warmth", "presence", "air"):
+        for k in ("denoise", "denoise_engine", "dereverb", "warmth", "presence", "air", "hum"):
             self.w[k].setEnabled(v("cinematic"))
         for k in ("music_db", "duck"):
             self.w[k].setEnabled(bool(self.music_path))
@@ -3438,6 +3446,33 @@ class MainWindow(QMainWindow):
             return data, T.prepare(path, a, count=4, progress=progress, log=lambda *_: None), words, hook
 
         self._run(job, self._thumbs_ready, tr("Thumbnails"))
+
+    def _compare_video(self):
+        """Before/after side-by-side of the selected short — a ready-made
+        promo clip (source left, short right)."""
+        it = self.queue.currentItem()
+        data = it.data(Qt.UserRole) if it else None
+        outs = (data or {}).get("outs") or []
+        if not data or not outs:
+            QMessageBox.information(self, APP_NAME,
+                                    tr("Create a short first — the comparison needs its output file."))
+            return
+        short = outs[0]
+        if not os.path.exists(short):
+            QMessageBox.information(self, APP_NAME, tr("Output file not found: %s") % short)
+            return
+        base = os.path.splitext(short)[0]
+        dst, _ = QFileDialog.getSaveFileName(self, tr("Save comparison"), base + "_compare.mp4",
+                                             "MP4 (*.mp4)")
+        if not dst:
+            return
+
+        def job(_p):
+            from .jobs import compare_video
+            return compare_video(data["path"], short, dst, lambda: None)
+
+        self._run(job, lambda _r: self._log(tr("✓ Comparison: %s") % dst),
+                  tr("Before/after"))
 
     def _thumbs_ready(self, res):
         data, variants, words, hook = res

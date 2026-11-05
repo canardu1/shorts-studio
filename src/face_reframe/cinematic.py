@@ -58,6 +58,10 @@ class CinematicParams:
     """High shelf at 10.5 kHz — "expensive mic" sheen (dB)."""
     limiter: float = 0.95
     """Brick-wall ceiling, as a fraction of full scale."""
+    hum_db: float = 0.0
+    """Mains-hum removal depth (dB): a notch at the *measured* frequency and
+    its harmonics — 0 disables it. The hum drifts a few Hz (loose grounds,
+    tape decks), so a fixed 50/60 Hz filter often misses it."""
 
 
 def _window_rms_db(pcm: np.ndarray, window_ms: float = 25.0) -> np.ndarray:
@@ -172,6 +176,47 @@ def _denoiser(p: CinematicParams, floor_db: float) -> Optional[str]:
         min(97.0, max(0.0, nr)), nf, ":gs=10" if afftdn_gs_supported() else "")
 
 
+def hum_notches(pcm: np.ndarray, depth_db: float) -> List[str]:
+    """Detect a mains hum (+ harmonics) in 16 kHz mono PCM; ffmpeg notch
+    strings. [] when no sinusoid stands out — real hum rises ≥8 dB over the
+    local spectrum floor. The peak is *measured*, not assumed: drifting hums
+    (48-53 Hz on a stretched tape) still get caught."""
+    if depth_db <= 0 or len(pcm) < SAMPLE_RATE * 2:
+        return []
+    n = min(4 * SAMPLE_RATE, len(pcm))      # ~0.25 Hz resolution at 4 s
+    win = np.hanning(n)
+    acc, k = None, max(1, min(8, len(pcm) // n))
+    step = max(1, (len(pcm) - n) // k) if len(pcm) > n else 0
+    for i in range(k):
+        seg = pcm[i * step:i * step + n]
+        if len(seg) < n:
+            break
+        spec = np.abs(np.fft.rfft(seg * win))
+        acc = spec if acc is None else acc + spec
+    if acc is None:
+        return []
+    freqs = np.fft.rfftfreq(n, 1.0 / SAMPLE_RATE)
+
+    def peak(lo: float, hi: float):
+        band = (freqs >= lo) & (freqs <= hi)
+        i = int(np.argmax(acc[band]))
+        a = float(acc[band][i])
+        med = float(np.median(acc[band])) + 1e-12
+        return float(freqs[band][i]), 20.0 * np.log10(max(a, 1e-12) / med)
+
+    f0, prom = peak(40.0, 80.0)
+    # white-ish noise tops out ~9 dB over the band median; a real hum sits
+    # far above it, so 14 dB keeps both worlds apart
+    if prom < 14.0:
+        return []
+    out = ["equalizer=f=%.1f:t=q:w=0.15:g=-%.1f" % (f0, depth_db)]
+    for h in (2, 3):
+        fh, ph = peak(f0 * h - 6.0, f0 * h + 6.0)
+        if fh <= 300.0 and ph > 10.0:
+            out.append("equalizer=f=%.1f:t=q:w=0.15:g=-%.1f" % (fh, depth_db * 0.6))
+    return out
+
+
 def output_dir_for(path: str) -> str:
     """Where baked files may be written: beside the source, else a temp dir.
 
@@ -195,15 +240,19 @@ def combine_loudness(parts: List[Tuple[float, float]]) -> float:
 
 
 def audio_chain(p: CinematicParams, floor_db: float,
-                speech_db: Optional[float] = None) -> str:
+                speech_db: Optional[float] = None,
+                hum: Optional[List[str]] = None) -> str:
     """ffmpeg -af string: clean first, then dynamics, then the tonal polish.
+
+    ``hum`` is :func:`hum_notches` output — measured notch filters inserted
+    before the denoiser so it sees a cleaner floor.
 
     With dereverberation on, the graph splits after the cleaning stage: the
     sweetened branch is gated by the *un-boosted* cleaned signal, so the
     compressor's makeup gain can't re-amplify the room tail it just
     suppressed. ``speech_db`` anchors the gate threshold to the spoken level.
     """
-    clean = []
+    clean = list(hum or [])
     if p.highpass > 0:
         clean.append("highpass=f=%.0f" % p.highpass)
     denoise = _denoiser(p, floor_db)
@@ -303,12 +352,13 @@ def measure_processed(path: str, start: float, duration: Optional[float],
                       p: CinematicParams, floor_db: float,
                       speech_db: Optional[float] = None,
                       progress: Optional[Callable[[float], None]] = None,
-                      audio_src: Optional[str] = None) -> float:
+                      audio_src: Optional[str] = None,
+                      hum: Optional[List[str]] = None) -> float:
     """Integrated loudness (LUFS) the clip will have after the chain runs.
 
     ``audio_src`` measures the chain on a different audio file (e.g. the
     DeepFilterNet output) while ``path`` only marks the position."""
-    chain = audio_chain(p, floor_db, speech_db)
+    chain = audio_chain(p, floor_db, speech_db, hum)
     cmd = [find_ffmpeg(), "-v", "info"]
     if start > 0:
         cmd += ["-ss", "%.6f" % start]
@@ -328,13 +378,14 @@ def bake_cinematic(path: str, out_path: str, p: CinematicParams,
                    floor_db: float, gain: float,
                    speech_db: Optional[float] = None,
                    progress: Optional[Callable[[float], None]] = None,
-                   duration: float = 0.0, audio_src: Optional[str] = None) -> str:
+                   duration: float = 0.0, audio_src: Optional[str] = None,
+                   hum: Optional[List[str]] = None) -> str:
     """Write ``out_path``: video stream-copied, audio cleaned + sweetened.
 
     Mirrors :func:`face_reframe.loudness.bake_normalized` — the copy keeps
     the source's frame layout, so timeline source ranges carry over.
     ``audio_src`` swaps the audio input (DeepFilterNet's cleaned WAV)."""
-    chain = audio_chain(p, floor_db, speech_db)
+    chain = audio_chain(p, floor_db, speech_db, hum)
     tail = "volume=%.2fdB,alimiter=limit=%.2f" % (gain, min(1.0, max(0.06, p.limiter)))
     chain = "%s,%s" % (chain, tail) if chain else tail
     cmd = [find_ffmpeg(), "-y", "-v", "error", "-i", path]
@@ -370,11 +421,12 @@ def enhance(path: str, out_path: str, p: Optional[CinematicParams] = None,
             # already denoised: the ffmpeg chain skips its own denoise stage
             p = _dc.replace(p, denoise_db=0)
     measure_src = dfn_wav or path
+    hum = hum_notches(pcm, p.hum_db)
     measured = measure_processed(measure_src, 0.0 if dfn_wav else start, duration,
-                                 p, floor, speech_db=loud, progress=progress)
+                                 p, floor, speech_db=loud, progress=progress, hum=hum)
     gain = gain_db(measured, target)
     bake_cinematic(path, out_path, p, floor, gain, speech_db=loud, progress=progress,
-                   audio_src=dfn_wav)
+                   audio_src=dfn_wav, hum=hum)
     return gain
 
 

@@ -112,6 +112,9 @@ No installer, no account, no admin password. Each AI feature downloads its model
 
 ### 🎚️ Audio
 - **Cinematic dialogue** in one click: denoise (**RNNoise** / **DeepFilterNet** / FFT), de-ess, de-reverb, rumble cut, compression, −14 LUFS
+- **Mains hum removal** — detects the real buzz frequency (50/60 Hz ± drift) and notches it + harmonics
+- **Interlaced & VFR sources** — old TV/DV clips and wonky phone captures are normalised once on ingest (bwdif deinterlace + CFR), so the reframe never shows combing and audio never drifts
+- **Before/after video** — one click exports a side-by-side comparison clip, ready to post
 - **Music ducked** under the voice with a sidechain compressor
 - **Live A/B preview** of the treated audio while you tune
 

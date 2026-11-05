@@ -30,7 +30,9 @@ def _degraded():
 
 def test_restores_only_the_face_without_seams():
     deg = _degraded()
-    out = restore.FaceRestorer("gpen256", blend=1.0)(deg)
+    r = restore.FaceRestorer("gpen256", blend=1.0)
+    for _ in range(8):              # the restoration fades in over ~7 frames
+        out = r(deg)
     d = np.abs(out.astype(int) - deg.astype(int)).sum(axis=2)
     ys, xs = np.nonzero(d > 6)
     assert len(xs), "the face should change"
@@ -47,8 +49,10 @@ def test_blend_zero_like_and_no_face_untouched():
     blank = np.full((640, 360, 3), 90, np.uint8)
     r = restore.FaceRestorer("gpen256", blend=0.8)
     assert np.array_equal(r(blank), blank)
-    weak = restore.FaceRestorer("gpen256", blend=0.1)(deg)
-    strong = restore.FaceRestorer("gpen256", blend=1.0)(deg)
+    rw = restore.FaceRestorer("gpen256", blend=0.1)
+    rs = restore.FaceRestorer("gpen256", blend=1.0)
+    weak = [rw(deg) for _ in range(8)][-1]      # fade-in ramp, like the render loop
+    strong = [rs(deg) for _ in range(8)][-1]
     assert np.abs(weak.astype(int) - deg).sum() < np.abs(strong.astype(int) - deg).sum()
 
 
