@@ -133,7 +133,7 @@ class ProgressBar:
     """Thin bar along the top/bottom edge that fills with playback time —
     the "watch to the end" cue viewers got used to on TikTok/Reels."""
 
-    COLOR = (77, 72, 229)  # app accent #e5484d, BGR
+    COLOR = (109, 77, 255)  # app accent #ff4d6d, BGR
 
     def __init__(self, n: int, out_w: int, out_h: int, pos: str = "top", frac: float = 0.007):
         self.n, self.w = n, out_w

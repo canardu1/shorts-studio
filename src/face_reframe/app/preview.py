@@ -142,8 +142,8 @@ class FrameView(QWidget):
             p.setPen(QPen(QColor("#4ade80"), 2))
             p.drawEllipse(target.x() + fx * s - 5, target.y() + fy * s - 5, 10, 10)
         if self._pick_rect is not None:
-            p.setPen(QPen(QColor("#e5484d"), 2, Qt.DashLine))
-            p.setBrush(QColor(229, 72, 77, 40))
+            p.setPen(QPen(QColor("#ff4d6d"), 2, Qt.DashLine))
+            p.setBrush(QColor(255, 77, 109, 40))
             p.drawRect(self._pick_rect)
         if self._badge:
             p.setPen(Qt.NoPen)

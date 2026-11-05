@@ -4,7 +4,8 @@ import os
 from PyInstaller.utils.hooks import collect_all
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
-datas = [(os.path.join(ROOT, "src", "face_reframe", "models"), "face_reframe/models")]
+datas = [(os.path.join(ROOT, "src", "face_reframe", "models"), "face_reframe/models"),
+         (os.path.join(ROOT, "src", "face_reframe", "app", "fonts"), "face_reframe/app/fonts")]
 binaries, hidden = [], ["face_reframe.app.window", "face_reframe.app.captions_qt"]
 # packages with native libs / data files PyInstaller doesn't find on its own;
 # imageio_ffmpeg carries the ffmpeg binary the app falls back to
