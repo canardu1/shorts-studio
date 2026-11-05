@@ -103,18 +103,16 @@ No installer, no account, no admin password. Each AI feature downloads its model
 - **Punch-in** on every phrase · handheld drift · slow push-in · crash zoom · impact shake — **beat-synced** to your music track
 - **Transitions:** whip pan, zoom, glitch — **stabilisation** per shot
 - **Slow motion ×2/×4** — **RIFE** invents real in-between frames, or instant FFmpeg blend
-- **Face restoration:** GPEN-256/512, GFPGAN, CodeFormer
+- **Face restoration:** GPEN-256/512, GFPGAN, CodeFormer — only on faces worth restoring (size + frontality gates), faded in over a few frames, source tones preserved
 - **Skin-tone fix** (exportable `.cube` LUT) · **Beauty** with neural face-parsing mask
 - **Colour:** 6 looks + **your own .cube LUTs** + auto WB + full manual **grade** (temp, tint, EV, contrast, sat, shadows, highlights, vignette)
 - **Lift dark shots** — SG-LLIE or URetinex neural low-light
 - **Blur background** — RVM fast or **MODNet** quality matting, guided-filter edges
-- **Enhance** — fast sharpen or Real-ESRGAN upscaling
+- **Enhance** — fast sharpen or Real-ESRGAN upscaling, **colour-locked** to the source so the palette can't drift or flicker
 
 ### 🎚️ Audio
 - **Cinematic dialogue** in one click: denoise (**RNNoise** / **DeepFilterNet** / FFT), de-ess, de-reverb, rumble cut, compression, −14 LUFS
 - **Mains hum removal** — detects the real buzz frequency (50/60 Hz ± drift) and notches it + harmonics
-- **Interlaced & VFR sources** — old TV/DV clips and wonky phone captures are normalised once on ingest (bwdif deinterlace + CFR), so the reframe never shows combing and audio never drifts
-- **Before/after video** — one click exports a side-by-side comparison clip, ready to post
 - **Music ducked** under the voice with a sidechain compressor
 - **Live A/B preview** of the treated audio while you tune
 
@@ -123,6 +121,7 @@ No installer, no account, no admin password. Each AI feature downloads its model
 - **Logo/watermark** + closing **CTA** card
 - **Progress bar** along the edge — the "watch to the end" cue
 - **Intro/outro cards** — full-frame brand images at the start and end
+- **Before/after video** — one click exports a side-by-side comparison clip, ready to post
 
 ### 🎬 Virtual studio
 - **Digital green screen** — cut the person out with the neural matte and drop them over a **solid colour**, an **image** or a **looping video**
@@ -135,6 +134,8 @@ No installer, no account, no admin password. Each AI feature downloads its model
 - **Undo/redo**, **projects** with autosave, **presets**
 - Native **macOS menu bar** (File/Edit/Tools/Playback/View) with standard ⌘ shortcuts
 - Disk cache, proxies for 4K HEVC, VideoToolbox encoding
+- **Interlaced & VFR sources** — old TV/DV clips and wonky phone captures are normalised once on ingest (bwdif deinterlace + CFR), so the reframe never combs and audio never drifts
+- Long renders keep the Mac awake until done
 
 </td>
 </tr>
