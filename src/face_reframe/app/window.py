@@ -217,17 +217,32 @@ class SegControl(QWidget):
         self.group.setExclusive(True)
         self._btns = []
         n = len(items)
+        self._labels = []
         for i, it in enumerate(items):
             label, data = it if isinstance(it, tuple) else (it, it)
-            b = QPushButton(tr(label))
+            full = tr(label)
+            b = QPushButton(full)
             b.setCheckable(True)
+            b.setToolTip(full)
             b.setObjectName("segFirst" if i == 0 else "segLast" if i == n - 1 else "segMid")
             b.setFlat(True)
             lay.addWidget(b, 1)
             self.group.addButton(b)
             self._btns.append((b, data))
+            self._labels.append(full)
         self._btns[0][0].setChecked(True)
         self.group.buttonClicked.connect(lambda _b: self.changed.emit())
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        # Elide labels that don't fit rather than letting Qt clip them;
+        # the full label is always in the button's tooltip.
+        per = max(40, (self.width() - 8) // max(1, len(self._btns)))
+        for (b, _d), full in zip(self._btns, self._labels):
+            fm = b.fontMetrics()
+            avail = per - 14
+            b.setText(fm.elidedText(full, Qt.ElideRight, avail)
+                      if fm.horizontalAdvance(full) > avail else full)
 
     def value(self):
         for b, d in self._btns:
@@ -615,6 +630,8 @@ class MainWindow(QMainWindow):
         spk_row.addWidget(self.hl_filter, 1)
         lay.addLayout(spk_row)
         self._hl_filter_src = None
+        lay.addWidget(hint(tr("Select a video in the list to preview it — “Find the best moments” "
+                              "suggests clips, “Create short” renders.")))
         return box
 
     def _build_preview(self):
@@ -754,10 +771,10 @@ class MainWindow(QMainWindow):
         # --- framing
         f = QFormLayout()
         W["aspect"] = seg(ASPECTS)
-        W["subject"] = seg([(tr("Main person"), "main"), (tr("Whoever speaks"), "speaker"),
-                            (tr("Picked object"), "object")])
-        W["noface"] = seg([(tr("Keep centred"), "center"), (tr("Follow object (neural)"), "object")])
-        W["speaker_engine"] = seg([(tr("Mouth motion"), "mouth"), (tr("Voice ID (neural)"), "voice")])
+        W["subject"] = seg([(tr("Main"), "main"), (tr("Speaker"), "speaker"),
+                            (tr("Object"), "object")])
+        W["noface"] = seg([(tr("Keep centred"), "center"), (tr("Object (AI)"), "object")])
+        W["speaker_engine"] = seg([(tr("Mouth motion"), "mouth"), (tr("Voice ID (AI)"), "voice")])
         W["layout"] = combo([(tr("One person"), "single"), (tr("Split 2 people (top/bottom)"), "split")])
         W["smoothing"] = dspin(0, 3, 0.1, 0.5, 1, " s")
         W["dead_zone"] = dspin(0, 0.5, 0.01, 0.05)
@@ -776,7 +793,7 @@ class MainWindow(QMainWindow):
         W["stride"].setCurrentIndex(1)
         self.camtpl_box = QComboBox()
         self.camtpl_box.activated.connect(lambda i: self._tpl_apply("camera", i))
-        f.addRow(tr("Camera style"), self._tpl_row(self.camtpl_box, "camera"))
+        f.addRow(tr("Camera template"), self._tpl_row(self.camtpl_box, "camera"))
         f.addRow(tr("Aspect"), W["aspect"])
         f.addRow(tr("Follow"), W["subject"])
         self.pick_obj_btn = QPushButton(tr("Pick object on this frame…"))
@@ -799,8 +816,8 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Wide when face <"), W["wide_threshold"])
         f.addRow(tr("Max wide zoom"), W["max_zoom"])
         f.addRow(tr("Detection"), W["stride"])
-        f.addRow(hint(tr("“Follow object” tracks the most salient thing in shots without faces — products, pets, B-roll — with the same U2-Net-p model used for thumbnail cut-outs (downloaded once, ~5 MB). "
-                         "Drag the yellow box in the preview to correct the crop from that point on. Below the preview, pick who to follow (select every thumbnail of the same person). “Whoever speaks” cuts to who is talking — Mouth motion judges by the lips, Voice ID (ECAPA, 84 MB once) listens to who is actually speaking and marks voice changes on the timeline.")))
+        f.addRow(hint(tr("“Object” tracking finds the most salient thing in shots without faces — products, pets, B-roll — with the same U2-Net-p model used for thumbnail cut-outs (downloaded once, ~5 MB). "
+                         "Drag the yellow box in the preview to correct the crop from that point on. Below the preview, pick who to follow (select every thumbnail of the same person). “Speaker” cuts to who is talking — Mouth motion judges by the lips, Voice ID (ECAPA, 84 MB once) listens to who is actually speaking and marks voice changes on the timeline.")))
         tabs.addTab(self._page(f), "Crop")
 
         # --- cuts
@@ -846,7 +863,7 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Captions"), W["subtitles"])
         self.captpl_box = QComboBox()
         self.captpl_box.activated.connect(self._apply_captpl)
-        f.addRow(tr("Style template"), self._tpl_row(self.captpl_box, "cap"))
+        f.addRow(tr("Caption template"), self._tpl_row(self.captpl_box, "cap"))
         f.addRow(tr("Style"), W["caption_style"])
         f.addRow(tr("Language"), W["language"])
         f.addRow(tr("Words per line"), W["caption_words"])
@@ -897,7 +914,7 @@ class MainWindow(QMainWindow):
         W["duck"].setCurrentIndex(1)
         self.audtpl_box = QComboBox()
         self.audtpl_box.activated.connect(lambda i: self._tpl_apply("audio", i))
-        f.addRow(tr("Voice preset"), self._tpl_row(self.audtpl_box, "audio"))
+        f.addRow(tr("Voice template"), self._tpl_row(self.audtpl_box, "audio"))
         f.addRow(W["cinematic"])
         f.addRow(tr("Noise reduction"), W["denoise"])
         f.addRow(tr("Denoise engine"), W["denoise_engine"])
@@ -1202,7 +1219,7 @@ class MainWindow(QMainWindow):
         crow.addWidget(clear)
         self.exptpl_box = QComboBox()
         self.exptpl_box.activated.connect(lambda i: self._tpl_apply("export", i))
-        f.addRow(tr("Platform preset"), self._tpl_row(self.exptpl_box, "export"))
+        f.addRow(tr("Export template"), self._tpl_row(self.exptpl_box, "export"))
         f.addRow(tr("Resolution"), W["resolution"])
         f.addRow(tr("Encoding"), W["preset"])
         f.addRow(tr("Quality (CRF)"), W["crf"])
@@ -1763,6 +1780,8 @@ class MainWindow(QMainWindow):
 
     def _tpl_row(self, box, group):
         """combo + Save + delete row for a template group."""
+        box.setToolTip(tr("Template: applies a saved recipe on top of the current preset — "
+                          "everything else stays as you set it"))
         save = QPushButton(tr("Save"))
         save.setFixedWidth(52)
         save.clicked.connect(lambda: self._tpl_save(group))
@@ -1977,6 +1996,9 @@ class MainWindow(QMainWindow):
         worker.result.connect(rec["relays"][0].deliver)
         worker.failed.connect(rec["relays"][1].deliver)
         self._workers.append(rec)
+        self.stage_lab.setProperty("err", False)
+        self.stage_lab.style().unpolish(self.stage_lab)
+        self.stage_lab.style().polish(self.stage_lab)
         self.stage_lab.setText(label + "…")
         th.start()
         return worker
@@ -1989,6 +2011,12 @@ class MainWindow(QMainWindow):
     def _bg_failed(self, err):
         if err != CANCELLED:
             self._log(tr("Error: %s") % err)
+            # Keep the failure visible in the status bar until the next job —
+            # a single log line scrolls away too easily to be the only sign.
+            self.stage_lab.setText(tr("Failed: %s") % err)
+            self.stage_lab.setProperty("err", True)
+            self.stage_lab.style().unpolish(self.stage_lab)
+            self.stage_lab.style().polish(self.stage_lab)
 
     def _busy(self, label: str) -> bool:
         return any(r["label"] == label for r in self._workers)
@@ -4079,8 +4107,9 @@ QWidget#panel { background: #0f0f13; }
 QWidget#previewPane { background: #0a0a0c; }
 QFrame#ctlcard { background: #121216; border: 1px solid #22222a; border-radius: 12px; }
 QLabel#h1 { font-size: 12px; font-weight: 700; color: #9a9aa8; }
-QLabel#hint { color: #7e7e8c; font-size: 12px; }
+QLabel#hint { color: #9494aa; font-size: 12px; }
 QLabel#status { color: #b6b6c2; font-weight: 600; }
+QLabel#status[err="true"] { color: #f5c542; }
 QLabel#section {
     color: #9a9aa8; font-size: 11px; font-weight: 700;
     padding: 10px 0 5px; border-bottom: 1px solid #232329; margin-bottom: 3px;
@@ -4122,7 +4151,7 @@ QToolButton#person:checked { border: 2px solid #ff4d6d; background: #2c151d; }
 QWidget#rail { background: #0c0c0f; }
 QToolButton#railBtn {
     border-radius: 8px; padding: 9px 2px 7px; margin: 0 2px;
-    font-size: 10px; color: #7e7e8c;
+    font-size: 10px; color: #9494aa;
 }
 QToolButton#railBtn:hover { background: #191920; color: #c0c0cc; }
 QToolButton#railBtn:checked { background: rgba(255, 77, 109, 30); color: #ff8fa3; }
@@ -4183,7 +4212,7 @@ QListWidget::item:selected {
 
 /* ---------- tabs ---------- */
 QTabWidget::pane { border: 1px solid #232329; border-radius: 8px; top: -1px; background: #101014; }
-QTabBar::tab { padding: 7px 11px; background: transparent; color: #7e7e8c; }
+QTabBar::tab { padding: 7px 11px; background: transparent; color: #9494aa; }
 QTabBar::tab:hover { color: #c0c0cc; }
 QTabBar::tab:selected { color: #ffffff; border-bottom: 2px solid #ff4d6d; }
 QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }
