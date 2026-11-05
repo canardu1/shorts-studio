@@ -308,6 +308,7 @@ class MainWindow(QMainWindow):
         self.cap_templates: Dict[str, dict] = {}
         self.aud_templates: Dict[str, dict] = {}
         self.grd_templates: Dict[str, dict] = {}
+        self.exp_templates: Dict[str, dict] = {}
         self.music_path = ""
         self.logo_path = ""
         self.lut_path = ""
@@ -1108,6 +1109,9 @@ class MainWindow(QMainWindow):
         crow = QHBoxLayout()
         crow.addWidget(self.cache_lab, 1)
         crow.addWidget(clear)
+        self.exptpl_box = QComboBox()
+        self.exptpl_box.activated.connect(lambda i: self._tpl_apply("export", i))
+        f.addRow(tr("Platform preset"), self._tpl_row(self.exptpl_box, "export"))
         f.addRow(tr("Resolution"), W["resolution"])
         f.addRow(tr("Encoding"), W["preset"])
         f.addRow(tr("Quality (CRF)"), W["crf"])
@@ -1472,9 +1476,11 @@ class MainWindow(QMainWindow):
         self.cap_templates = presets.load_user(st.value("cap_templates", "") or "")
         self.aud_templates = presets.load_user(st.value("aud_templates", "") or "")
         self.grd_templates = presets.load_user(st.value("grd_templates", "") or "")
+        self.exp_templates = presets.load_user(st.value("exp_templates", "") or "")
         self._fill_captpl()
         self._tpl_fill("audio")
         self._tpl_fill("grade")
+        self._tpl_fill("export")
         geo = st.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)
@@ -1517,6 +1523,7 @@ class MainWindow(QMainWindow):
         st.setValue("cap_templates", presets.dump_user(self.cap_templates))
         st.setValue("aud_templates", presets.dump_user(self.aud_templates))
         st.setValue("grd_templates", presets.dump_user(self.grd_templates))
+        st.setValue("exp_templates", presets.dump_user(self.exp_templates))
         st.setValue("geometry", self.saveGeometry())
         st.setValue("splitter", self._split_root.saveState())
 
@@ -1643,6 +1650,7 @@ class MainWindow(QMainWindow):
         "cap":   ("captpl_box", "cap_templates", "CAPTION_BUILTIN", "CAPTION_KEYS"),
         "audio": ("audtpl_box", "aud_templates", "AUDIO_BUILTIN", "AUDIO_KEYS"),
         "grade": ("grdtpl_box", "grd_templates", "GRADE_BUILTIN", "GRADE_KEYS"),
+        "export": ("exptpl_box", "exp_templates", "EXPORT_BUILTIN", "EXPORT_KEYS"),
     }
 
     def _tpl_row(self, box, group):

@@ -775,6 +775,7 @@ _IT = {
     "Only styles you saved yourself (★) can be deleted.":
         "Puoi eliminare solo gli stili salvati da te (★).",
     "Voice preset": "Preset voce",
+    "Platform preset": "Preset piattaforma",
     "Grade template": "Modello colore",
     "Base look": "Look di base",
     "Save template": "Salva modello",

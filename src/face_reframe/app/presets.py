@@ -225,6 +225,36 @@ GRADE_BUILTIN: Dict[str, dict] = {
 }
 
 
+# Export/platform recipes: resolution + encoder + extras for each target.
+# A platform implies its aspect too, so that travels in the recipe.
+EXPORT_KEYS = ("aspect", "resolution", "preset", "crf", "fmt_45", "fmt_11",
+               "fmt_169", "encoder", "slowmo", "slowmo_engine", "cover",
+               "social", "progress_bar")
+
+EXPORT_BUILTIN: Dict[str, dict] = {
+    "TikTok": dict(aspect="9:16", resolution=1920, encoder="auto", preset="fast",
+                   crf=18, fmt_45=True, fmt_11=False, fmt_169=False,
+                   slowmo=1, slowmo_engine="rife", cover=True, social=True,
+                   progress_bar="top"),
+    "Instagram Reels": dict(aspect="9:16", resolution=1920, encoder="auto",
+                            preset="fast", crf=18, fmt_45=True, fmt_11=False,
+                            fmt_169=False, slowmo=1, slowmo_engine="rife",
+                            cover=True, social=True, progress_bar="bottom"),
+    "YouTube Shorts": dict(aspect="9:16", resolution=1920, encoder="auto",
+                           preset="fast", crf=16, fmt_45=False, fmt_11=False,
+                           fmt_169=True, slowmo=1, slowmo_engine="rife",
+                           cover=True, social=True, progress_bar="off"),
+    "Master archive": dict(aspect="9:16", resolution=1920, encoder="software",
+                           preset="medium", crf=14, fmt_45=False, fmt_11=False,
+                           fmt_169=False, slowmo=1, slowmo_engine="rife",
+                           cover=False, social=False, progress_bar="off"),
+    "Fast draft": dict(aspect="9:16", resolution=1280, encoder="auto",
+                       preset="veryfast", crf=22, fmt_45=False, fmt_11=False,
+                       fmt_169=False, slowmo=1, slowmo_engine="ffmpeg",
+                       cover=False, social=False, progress_bar="off"),
+}
+
+
 def load_user(raw: str) -> Dict[str, dict]:
     try:
         data = json.loads(raw or "{}")

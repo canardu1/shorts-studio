@@ -131,7 +131,7 @@ No installer, no account, no admin password. Each AI feature downloads its model
 
 ### 🧰 Workflow
 - Live side-by-side preview · safe-zone overlay for TikTok/Reels/Shorts
-- **Undo/redo**, **projects** with autosave, **presets**
+- **Undo/redo**, **projects** with autosave, **presets** — content-type recipes (Interview, Gaming, ASMR, Archive restore…) plus saveable **templates** for voice chains, colour grades, caption styles and per-platform export
 - Native **macOS menu bar** (File/Edit/Tools/Playback/View) with standard ⌘ shortcuts
 - Disk cache, proxies for 4K HEVC, VideoToolbox encoding
 - **Interlaced & VFR sources** — old TV/DV clips and wonky phone captures are normalised once on ingest (bwdif deinterlace + CFR), so the reframe never combs and audio never drifts
