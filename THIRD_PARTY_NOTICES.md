@@ -30,6 +30,7 @@ Shorts Studio / Face Reframe is licensed under GPL-3.0 (see `LICENSE`). It uses 
 | RIFE 4.8 `rife48_ensemble_True_scale_1_sim.onnx` | frame interpolation (slow motion) | [yuvraj108c/rife-onnx](https://huggingface.co/yuvraj108c/rife-onnx); original [hzwer/Practical-RIFE](https://github.com/hzwer/Practical-RIFE) | MIT |
 | NanoTrackV2 `nanotrack_backbone/head_sim.onnx` | picked-object tracking (OpenCV TrackerNano) | [HonglinChu/SiamTrackers](https://github.com/HonglinChu/SiamTrackers) | Apache-2.0 |
 | DeepFilterNet `deep-filter` binary | neural audio denoise | [Rikorose/DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) | MIT |
+| paraphrase-multilingual-MiniLM-L12-v2 `model_quantized.onnx` + tokenizer | sentence embeddings for the best-moments "complete thought" check | [Xenova/paraphrase-multilingual-MiniLM-L12-v2](https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2); original [sentence-transformers](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2) | Apache-2.0 |
 
 If you use Shorts Studio commercially, pick **GFPGAN** (or "off") for face restoration: the GPEN and CodeFormer weights may not be used for commercial purposes.
 

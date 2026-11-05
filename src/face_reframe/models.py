@@ -57,6 +57,14 @@ MODELS: Dict[str, Model] = {
     "modnet": Model("modnet", "modnet.onnx",
                     "https://github.com/facefusion/facefusion-assets/releases/download/models-3.5.0/modnet.onnx",
                     20_000_000, 24, "MODNet (portrait matting)"),
+    # multilingual sentence embeddings — the highlight "is it a complete
+    # thought?" scorer (Xenova mirror: quantised for every CPU, ~118 MB)
+    "minilm": Model("minilm", "minilm-q8.onnx",
+                    _HF + "/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/onnx/model_quantized.onnx",
+                    100_000_000, 118, "MiniLM sentence embeddings"),
+    "minilm_tok": Model("minilm_tok", "minilm-tokenizer.json",
+                        _HF + "/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/tokenizer.json",
+                        10_000_000, 17, "MiniLM tokenizer"),
     # generic object tracking (OpenCV TrackerNano wants two files)
     "nanotrack_backbone": Model("nanotrack_backbone", "nanotrack_backbone_sim.onnx",
                                 _GH_RAW + "/HonglinChu/SiamTrackers/master/NanoTrack/models/nanotrackv2/nanotrack_backbone_sim.onnx",

@@ -273,11 +273,14 @@ def _extract_wav(src: str, out: str):
 
 
 class MainWindow(QMainWindow):
+    log_sig = Signal(str)   # thread-safe log from worker threads
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
         self.resize(1480, 900)
         self.setAcceptDrops(True)
+        self.log_sig.connect(self._log)
         self.cache = AnalysisCache()
         self.result = None
         self.reader: Optional[VideoReader] = None
@@ -513,6 +516,11 @@ class MainWindow(QMainWindow):
         hl_row.addWidget(self.hl_btn, 1)
         hl_row.addWidget(self.hl_count)
         lay.addLayout(hl_row)
+        hl_sem = self.w["hl_semantic"] = QCheckBox(
+            tr("Check clips are complete thoughts (~135 MB, once)"))
+        hl_sem.setToolTip(tr("A small local AI model reads each suggested clip and penalises ones that "
+                             "start mid-discussion or switch topic halfway"))
+        lay.addWidget(hl_sem)
         return box
 
     def _build_preview(self):
@@ -2892,7 +2900,25 @@ class MainWindow(QMainWindow):
     def _finish_highlights(self, src, words, events):
         from .highlights import find_highlights
         dur = self.reader.count / self.reader.fps if self.reader and self.current == src["path"] else words[-1].end
-        hls = find_highlights(words, dur, count=self.hl_count.value(), events=events)
+        n = self.hl_count.value()
+        if self._val("hl_semantic"):
+            self._log(tr("Reading the transcript sentence by sentence (MiniLM)…"))
+
+            def job(progress):
+                from .sembed import get
+                emb = get(progress, self.log_sig.emit)
+                return find_highlights(words, dur, count=n, events=events, embedder=emb)
+
+            def fail(_e):
+                self._log(tr("Semantic check failed — using heuristics only"))
+                self._apply_highlights(src, find_highlights(words, dur, count=n, events=events))
+
+            self._run(job, lambda hls: self._apply_highlights(src, hls),
+                      tr("Best moments"), on_fail=fail)
+            return
+        self._apply_highlights(src, find_highlights(words, dur, count=n, events=events))
+
+    def _apply_highlights(self, src, hls):
         if not hls:
             self._log(tr("Video too short or no speech: no moments suggested"))
             return

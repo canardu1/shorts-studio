@@ -82,7 +82,7 @@ No installer, no account, no admin password. Each AI feature downloads its model
 
 ### ✂️ Editing
 - **Cut pauses** (Silero VAD or level/dB), **cut breaths**, **cut fillers**, **cut retakes** — last take wins
-- **Best moments finder** — strongest 30–60 s clips, boosted by **YAMNet** laughter/applause/music detection
+- **Best moments finder** — strongest 30–60 s clips, boosted by **YAMNet** laughter/applause/music detection; optional **MiniLM** sentence embeddings (multilingual) check each clip is a complete thought — no mid-sentence starts, no topic switches halfway
 - **Manual timeline editing** — drag a range, **X** to cut (amber, on top of the automatic cuts), right-click to restore; **B** marks a blade point, second **B** cuts between marks; selection **snaps** to shot cuts, markers and events; trim clip edges or cut to end from the same menu; everything undoable
 - **Clip ranges** + **batch** a whole folder
 
@@ -215,6 +215,7 @@ Small ONNX models on CPU (OpenCV / onnxruntime). Some ship with the repo, the re
 | Audio | YAMNet events, ECAPA voice ID, DeepFilterNet | 16–84 MB |
 | Video | RIFE interpolation, Real-ESRGAN, BiSeNet beauty | 0.06–89 MB |
 | Speech | Silero VAD, faster-whisper | bundled |
+| Text | MiniLM sentence embeddings (highlights) | 135 MB |
 
 Licences: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — note that **CodeFormer and GPEN are for non-commercial use only**.
 

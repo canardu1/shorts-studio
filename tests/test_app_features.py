@@ -153,6 +153,110 @@ def test_highlights_prefers_dense_hooky_sentence():
     assert hl and hl[0].start > 39
 
 
+def _spoken_sents(sents, wpm_dur=0.35):
+    """List of sentences (lists of tokens) -> (words, end_t): 0.28 s words,
+    a 1.0 s pause between sentences so every sentence is a clip boundary."""
+    words, t = [], 0.5
+    for sent in sents:
+        for tok in sent:
+            words.append(Word(t, t + 0.28, tok)); t += wpm_dur
+        t += 1.0
+    return words, t
+
+
+def _best_score(sents, **kw):
+    from face_reframe.app.highlights import find_highlights
+    words, t = _spoken_sents(sents)
+    hl = find_highlights(words, t, count=1, min_len=1.0, max_len=120.0, **kw)
+    return hl[0].score if hl else float("-inf")
+
+
+def test_highlights_penalises_connector_and_anaphora_starts():
+    from face_reframe.app.highlights import find_highlights
+    body = ("segreto", "che", "nessuno", "ti", "racconta", "mai", "prima", "di",
+            "iniziare", "a", "lavorare", "bene", "davvero.")
+    # same body: bare "il segreto…" start vs connector "ma il segreto…" vs pronoun "questo segreto…"
+    clean = _best_score([("il",) + body])
+    conn = _best_score([("ma",) + body])
+    ana = _best_score([("questo",) + body])
+    assert clean > conn > ana - 1.0   # connector costs more than a pronoun
+    assert conn < clean and ana < clean
+
+
+def test_highlights_penalises_function_word_tail():
+    full = ["il", "segreto", "è", "lavorare", "bene", "davvero", "ogni", "singolo", "giorno", "sempre."]
+    frag = ["il", "segreto", "è", "lavorare", "bene", "davvero", "ogni", "singolo", "giorno", "con"]
+    assert _best_score([full]) > _best_score([frag])
+
+
+def test_highlights_question_wants_an_answer():
+    q_only = ["perché", "nessuno", "te", "lo", "dice", "mai?"] + ["ecco."] * 2
+    q_answer = q_only + ["perché", "il", "metodo", "giusto", "cambia", "tutto",
+                         "quando", "lo", "applichi", "davvero", "ogni", "singolo", "giorno."]
+    assert _best_score([q_answer]) > _best_score([q_only])
+
+
+def test_highlights_embedder_mid_thought_and_topic_switch():
+    import numpy as np
+    from face_reframe.app.highlights import find_highlights
+    sents = [["il", "metodo", "funziona", "così."]]
+    mid = ["e", "poi", "segue", "naturale", "da", "solo", "ogni", "volta", "sempre."]
+    topic = ["la", "ricetta", "dolce", "usa", "farina", "e", "zucchero", "insomma."]
+
+    def make_emb(mapping):
+        def emb(texts):
+            return np.array([mapping.get(x) for x in texts], dtype=np.float32)
+        return emb
+
+    e0, e1, e2 = np.eye(3, dtype=np.float32)
+    # clip starts mid-thought: first sentence identical (in meaning) to the previous one
+    s_mid = " ".join(mid); s_prev = " ".join(sents[0]); s_topic = " ".join(topic)
+
+    def score_at(hls, start):
+        return next(h.score for h in hls if abs(h.start - start) < 0.01)
+
+    # mid-thought: max_len excludes the all-spanning clip so the clip starting
+    # at `mid` is picked in both runs; first sentence ~identical to its
+    # predecessor (mid-thought) vs orthogonal (clean start)
+    words2, t2 = _spoken_sents([sents[0], mid])
+    mid_start = words2[len(sents[0])].start - 0.15
+    hl_mid = find_highlights(words2, t2, count=10, min_len=1.0, max_len=4.0,
+                             embedder=make_emb({s_prev: e0, s_mid: e0}))
+    hl_clean = find_highlights(words2, t2, count=10, min_len=1.0, max_len=4.0,
+                               embedder=make_emb({s_prev: e0, s_mid: e2}))
+    assert score_at(hl_clean, mid_start) > score_at(hl_mid, mid_start)
+
+    # topic switch: min_len leaves only the whole-span clip; same candidate in
+    # both runs, last sentence aligned vs orthogonal to the previous one
+    words3, t3 = _spoken_sents([mid, topic])
+    hl_c = find_highlights(words3, t3, count=10, min_len=4.0, max_len=120.0,
+                           embedder=make_emb({s_mid: e2, s_topic: e2}))
+    hl_s = find_highlights(words3, t3, count=10, min_len=4.0, max_len=120.0,
+                           embedder=make_emb({s_mid: e2, s_topic: e1}))
+    assert len(hl_c) == len(hl_s) == 1
+    assert hl_c[0].score > hl_s[0].score
+
+
+def test_highlights_embedder_fallback_and_nonoverlap():
+    from face_reframe.app.highlights import find_highlights
+    sents = [["il", "segreto", "è", "questo", "metodo", "nuovo."]]
+    sents += [["e", "funziona", "bene", "sempre", "davvero", "tanto."]] * 8
+    words, t = _spoken_sents(sents)
+    hl_plain = find_highlights(words, t, count=3, min_len=3.0, max_len=120.0)
+    hl_none = find_highlights(words, t, count=3, min_len=3.0, max_len=120.0,
+                              embedder=lambda texts: None)
+
+    def boom(texts):
+        raise RuntimeError("model missing")
+    hl_boom = find_highlights(words, t, count=3, min_len=3.0, max_len=120.0,
+                              embedder=boom)
+    # a missing/failing model changes nothing — heuristics still rule
+    assert [(h.start, h.end) for h in hl_none] == [(h.start, h.end) for h in hl_plain]
+    assert [(h.start, h.end) for h in hl_boom] == [(h.start, h.end) for h in hl_plain]
+    for a, b in zip(hl_plain, hl_plain[1:]):
+        assert a.end <= b.start or b.end <= a.start
+
+
 def test_diskcache_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("SHORTS_STUDIO_CACHE", str(tmp_path / "c"))
     f = tmp_path / "x.bin"

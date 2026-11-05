@@ -38,6 +38,19 @@ _IT = {
         "Propone le clip da 30–60 s più forti del video selezionato "
         "e le aggiunge alla lista come short separati",
     "How many clips to suggest": "Quante clip proporre",
+    "Check clips are complete thoughts (~135 MB, once)":
+        "Verifica che le clip siano pensieri completi (~135 MB, una volta)",
+    "A small local AI model reads each suggested clip and penalises ones that "
+    "start mid-discussion or switch topic halfway":
+        "Un piccolo modello AI locale legge ogni clip proposta e penalizza quelle che "
+        "iniziano a metà discorso o cambiano argomento a metà",
+    "Reading the transcript sentence by sentence (MiniLM)…":
+        "Leggo la trascrizione frase per frase (MiniLM)…",
+    "Semantic check failed — using heuristics only":
+        "Verifica semantica fallita — uso solo le euristiche",
+    "  sentence embeddings unavailable (%s)":
+        "  embedding delle frasi non disponibili (%s)",
+    "Best moments": "Momenti migliori",
     "Open project…": "Apri progetto…",
     "Save project…": "Salva progetto…",
     "Title, description & hashtags…": "Titolo, descrizione e hashtag…",
