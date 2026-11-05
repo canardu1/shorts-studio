@@ -336,6 +336,7 @@ class MainWindow(QMainWindow):
         self._skin_view = None       # (key, correction at the current strength)
         self._voice = {}             # abs path -> voice-tagged speech spans (ECAPA)
         self._voice_on = False       # a voice-id job is running
+        self._feat_cache = {}        # per-source VAD/beat/cut results — replan must not rescan 30 min of PCM every time
         self._restorer = None        # preview face restorer (built in the background)
         self._restorer_key = None
         self._matter = None          # preview person matte for background blur
@@ -1838,6 +1839,7 @@ class MainWindow(QMainWindow):
                 self.proxy.close()
                 self.proxy = None
             self.pcm = {}
+            self._feat_cache = {}
             self.removed = []
             self._blade = None
             self.timeline.blade = None
@@ -2002,15 +2004,30 @@ class MainWindow(QMainWindow):
         pcm = self.pcm.get(key)
         words = self._words()
         fps = self.reader.fps
+        # VAD once per source+settings — punch, motion and cut preview all
+        # need the same speech spans, and a full pass over a long interview's
+        # PCM is the main reason replan stutters
+        speech_spans = None
+        if pcm is not None:
+            sp_key = ("speech", dataclasses.astuple(s.speech))
+            if sp_key not in self._feat_cache:
+                from ..silence import speech_intervals
+                self._feat_cache[sp_key] = speech_intervals(pcm, s.speech)
+            speech_spans = self._feat_cache[sp_key]
         # cut ranges (source timeline) for the timeline strip
         self.removed = []
         if pcm is not None and s.cuts:
             from .jobs import cut_spans
-            dur = len(pcm) / 16000.0
-            spans = cut_spans(pcm, dur, s, words, lambda *_: None)
-            if spans:
-                edges = [0.0] + [t for sp in spans for t in sp] + [dur]
-                self.removed = [(a, b) for a, b in zip(edges[::2], edges[1::2]) if b - a > 0.02]
+            wkey = (len(words), words[0].start, words[-1].end) if words else None
+            ck = ("cuts", s.cut_pauses, s.cut_breaths, s.cut_fillers, s.cut_retakes,
+                  dataclasses.astuple(s.speech), wkey)
+            if ck not in self._feat_cache:
+                dur = len(pcm) / 16000.0
+                spans = cut_spans(pcm, dur, s, words, lambda *_: None, speech=speech_spans)
+                edges = [0.0] + [t for sp in (spans or []) for t in sp] + [dur]
+                self._feat_cache[ck] = [(a, b) for a, b in zip(edges[::2], edges[1::2])
+                                        if b - a > 0.02] if spans else []
+            self.removed = list(self._feat_cache[ck])
         mcuts = self.manual_cuts.get(key) or []
         if mcuts and self.clip_range is None:
             self.removed = sorted(self.removed + [(a, b) for a, b in mcuts])
@@ -2051,21 +2068,22 @@ class MainWindow(QMainWindow):
                     100 * int(self._split.mask.sum()) // max(1, a.frame_count)) if self._split else \
                     tr(" · split: need 2 people in the same shot")
             if s.punch and pcm is not None:
-                from ..silence import speech_intervals
                 from .compose import punch_curve
-                self._punch = punch_curve(speech_intervals(pcm, s.speech), a.frame_count, fps, s.punch_zoom)
+                self._punch = punch_curve(speech_spans, a.frame_count, fps, s.punch_zoom)
             if s.motion is not None and s.motion.active:
-                from ..silence import speech_intervals
                 from .jobs import _seed
                 from .motion import build_motion
                 shot_cuts = [x for x, _ in self.result.path.segments[1:]]
                 rem = [(int(round(a0 * fps)), int(round(b0 * fps))) for a0, b0 in self.removed]
                 edits = sorted([(c, c) for c in shot_cuts] + rem)
-                phrases = speech_intervals(pcm, s.speech) if pcm is not None else []
+                phrases = speech_spans if speech_spans is not None else []
                 beat_times = []
                 if s.motion.beat_sync:
-                    from .motion import beats as detect_beats
-                    beat_times = detect_beats(self._beat_pcm(pcm))
+                    bk = ("beats", self.music_path or "")
+                    if bk not in self._feat_cache:
+                        from .motion import beats as detect_beats
+                        self._feat_cache[bk] = detect_beats(self._beat_pcm(pcm))
+                    beat_times = self._feat_cache[bk]
                 self._motion = build_motion(a.frame_count, fps, s.motion, edits, shot_cuts, phrases,
                                             words, pcm, seed=_seed(self.current), skip=rem,
                                             beat_times=beat_times)

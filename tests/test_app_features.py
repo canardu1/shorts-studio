@@ -237,6 +237,42 @@ def test_highlights_embedder_mid_thought_and_topic_switch():
     assert hl_c[0].score > hl_s[0].score
 
 
+def test_highlights_penalises_end_mid_thought():
+    import numpy as np
+    from face_reframe.app.highlights import find_highlights
+    a = ["il", "metodo", "funziona", "bene", "sempre", "davvero", "per", "tutti", "insieme."]
+    nxt_conn = ["e", "poi", "segue", "da", "solo", "ogni", "volta", "davvero."]
+    nxt_clean = ["la", "storia", "nuova", "inizia", "qui", "davvero", "sempre", "bene."]
+
+    def end_score(sents):
+        words, t = _spoken_sents(sents)
+        hls = find_highlights(words, t, count=20, min_len=1.0, max_len=4.0)
+        a_end = words[len(a) - 1].end + 0.25
+        return next((h.score for h in hls if abs(h.end - a_end) < 0.01), None)
+
+    # Level 1: the same clip ending scores worse when the next sentence opens
+    # with a connector — the thought runs on past the cut
+    assert end_score([a, nxt_clean]) > end_score([a, nxt_conn])
+
+    # Level 2: same clip, same words — only the embeddings change: a last
+    # sentence similar to the one after the cut = ending mid-concept
+    sents = [a, nxt_clean]
+    words, t = _spoken_sents(sents)
+    s_a, s_b = " ".join(a), " ".join(nxt_clean)
+    e0, e1 = np.eye(2, dtype=np.float32)
+    a_end = words[len(a) - 1].end + 0.25
+
+    def emb(mapping):
+        return lambda texts: np.array([mapping.get(x) for x in texts], dtype=np.float32)
+
+    def sem_score(mapping):
+        hls = find_highlights(words, t, count=20, min_len=1.0, max_len=4.0,
+                              embedder=emb(mapping))
+        return next((h.score for h in hls if abs(h.end - a_end) < 0.01), None)
+
+    assert sem_score({s_a: e0, s_b: e1}) > sem_score({s_a: e0, s_b: e0})
+
+
 def test_highlights_embedder_fallback_and_nonoverlap():
     from face_reframe.app.highlights import find_highlights
     sents = [["il", "segreto", "è", "questo", "metodo", "nuovo."]]

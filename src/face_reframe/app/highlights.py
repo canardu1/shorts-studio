@@ -152,6 +152,12 @@ def find_highlights(words: Sequence, duration: float, count: int = 5,
             edge = (-0.6 if first in CONTINUATION else 0.0) \
                 + (-0.35 if first in ANAPHORA else 0.0) \
                 + (-0.7 if last in TAIL_FUNC else 0.0)
+            # symmetric look past the cut: a connector or bare pronoun as the
+            # next word means the thought runs on — the clip ends mid-concept
+            if ei + 1 < len(w):
+                nxt = _norm(w[ei + 1].text)
+                edge += (-0.5 if nxt in CONTINUATION else 0.0) \
+                    + (-0.3 if nxt in ANAPHORA else 0.0)
             score = (min(density, 3.5) / 3.5) * 2.0 + talk_ratio * 1.5 + min(hook, 4) * 0.35 \
                 + complete * 0.5 - fillers * 3.0 + edge
             if emb is not None:
@@ -162,6 +168,10 @@ def find_highlights(words: Sequence, duration: float, count: int = 5,
                     cs = emb[s0:s1 + 1]
                     ms = float((cs[:-1] * cs[1:]).sum(1).min())
                     score -= max(0.0, 0.50 - ms) * 2.0
+                if s1 < len(emb) - 1:  # the sentence after the cut still
+                    # resembles the last one = the thought continues past the
+                    # clip's end — prefer candidates ending at a real break
+                    score -= max(0.0, float((emb[s1] * emb[s1 + 1]).sum()) - 0.5) * 3.0
             # mild preference for ~45 s
             score -= abs(length - 0.5 * (min_len + max_len)) / max_len * 0.3
             if events is not None:

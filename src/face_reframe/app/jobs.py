@@ -662,12 +662,17 @@ def transcribe_file(path: str, language: Optional[str], cache: Optional[Analysis
 
 
 def cut_spans(pcm, duration: float, s: JobSettings, words, log: Log,
-              manual_cuts: Optional[List[Span]] = None) -> Optional[List[Span]]:
-    """Kept spans (seconds) for the cut settings; ``None`` = nothing to cut."""
+              manual_cuts: Optional[List[Span]] = None,
+              speech: Optional[List[Span]] = None,
+              breaths: Optional[List[Span]] = None) -> Optional[List[Span]]:
+    """Kept spans (seconds) for the cut settings; ``None`` = nothing to cut.
+
+    ``speech``/``breaths`` let callers pass intervals they already computed
+    (the preview replans often — a VAD pass over a long file is not cheap)."""
     from .. import silence
     spans = [(0.0, duration)]
     if s.cut_pauses:
-        found = silence.speech_intervals(pcm, s.speech)
+        found = speech if speech is not None else silence.speech_intervals(pcm, s.speech)
         if found:
             spans = found
         else:
@@ -676,7 +681,8 @@ def cut_spans(pcm, duration: float, s: JobSettings, words, log: Log,
     if holes:
         log(tr("  %d manual cut%s") % (len(holes), "s" if len(holes) != 1 else ""))
     if s.cut_breaths:
-        br = silence.breath_intervals(pcm, BreathParams(margin_db=s.speech.margin_db))
+        br = breaths if breaths is not None else silence.breath_intervals(
+            pcm, BreathParams(margin_db=s.speech.margin_db))
         holes += [(a - 0.03, b + 0.03) for a, b in br]
         log(tr("  %d breaths") % len(br))
     if words is not None and s.cut_fillers:
