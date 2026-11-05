@@ -306,6 +306,8 @@ class MainWindow(QMainWindow):
         self._renderer = None
         self.user_presets: Dict[str, dict] = {}
         self.cap_templates: Dict[str, dict] = {}
+        self.aud_templates: Dict[str, dict] = {}
+        self.grd_templates: Dict[str, dict] = {}
         self.music_path = ""
         self.logo_path = ""
         self.lut_path = ""
@@ -752,19 +754,7 @@ class MainWindow(QMainWindow):
         f.addRow(tr("Captions"), W["subtitles"])
         self.captpl_box = QComboBox()
         self.captpl_box.activated.connect(self._apply_captpl)
-        ct_save = QPushButton(tr("Save"))
-        ct_save.setFixedWidth(52)
-        ct_save.clicked.connect(self._save_captpl)
-        ct_del = QPushButton("✕")
-        ct_del.setFixedWidth(32)
-        ct_del.clicked.connect(self._delete_captpl)
-        ctrow = QHBoxLayout()
-        ctrow.addWidget(self.captpl_box, 1)
-        ctrow.addWidget(ct_save)
-        ctrow.addWidget(ct_del)
-        ctw = QWidget()
-        ctw.setLayout(ctrow)
-        f.addRow(tr("Style template"), ctw)
+        f.addRow(tr("Style template"), self._tpl_row(self.captpl_box, "cap"))
         f.addRow(tr("Style"), W["caption_style"])
         f.addRow(tr("Language"), W["language"])
         f.addRow(tr("Words per line"), W["caption_words"])
@@ -813,6 +803,9 @@ class MainWindow(QMainWindow):
         W["music_db"] = dspin(-40, 0, 1, -18, 0, " dB")
         W["duck"] = combo(DUCK)
         W["duck"].setCurrentIndex(1)
+        self.audtpl_box = QComboBox()
+        self.audtpl_box.activated.connect(lambda i: self._tpl_apply("audio", i))
+        f.addRow(tr("Voice preset"), self._tpl_row(self.audtpl_box, "audio"))
         f.addRow(W["cinematic"])
         f.addRow(tr("Noise reduction"), W["denoise"])
         f.addRow(tr("Denoise engine"), W["denoise_engine"])
@@ -965,7 +958,10 @@ class MainWindow(QMainWindow):
         W["look_strength"] = dspin(0, 1, 0.05, 1.0)
         W["auto_wb"] = QCheckBox(tr("Auto white balance and exposure"))
         f.addRow(section(tr("Look")))
-        f.addRow(tr("Preset"), W["look"])
+        self.grdtpl_box = QComboBox()
+        self.grdtpl_box.activated.connect(lambda i: self._tpl_apply("grade", i))
+        f.addRow(tr("Grade template"), self._tpl_row(self.grdtpl_box, "grade"))
+        f.addRow(tr("Base look"), W["look"])
         f.addRow(tr("Strength"), W["look_strength"])
         self.lut_edit = QLineEdit()
         self.lut_edit.setReadOnly(True)
@@ -1474,7 +1470,11 @@ class MainWindow(QMainWindow):
         self.user_presets = presets.load_user(st.value("presets", "") or "")
         self._fill_presets()
         self.cap_templates = presets.load_user(st.value("cap_templates", "") or "")
+        self.aud_templates = presets.load_user(st.value("aud_templates", "") or "")
+        self.grd_templates = presets.load_user(st.value("grd_templates", "") or "")
         self._fill_captpl()
+        self._tpl_fill("audio")
+        self._tpl_fill("grade")
         geo = st.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)
@@ -1515,6 +1515,8 @@ class MainWindow(QMainWindow):
         st.setValue("caption_font", self.caption_font.currentFont().family())
         st.setValue("presets", presets.dump_user(self.user_presets))
         st.setValue("cap_templates", presets.dump_user(self.cap_templates))
+        st.setValue("aud_templates", presets.dump_user(self.aud_templates))
+        st.setValue("grd_templates", presets.dump_user(self.grd_templates))
         st.setValue("geometry", self.saveGeometry())
         st.setValue("splitter", self._split_root.saveState())
 
@@ -1621,7 +1623,7 @@ class MainWindow(QMainWindow):
             return
         self.user_presets[name] = {k: self._val(k) for k in self.w}
         self._fill_presets()
-        self.preset_box.setCurrentIndex(self.preset_box.findData(("user", name)))
+        self.preset_box.setCurrentIndex(_data_index(self.preset_box, ("user", name)))
         self._save_settings()
 
     def _delete_preset(self):
@@ -1633,49 +1635,99 @@ class MainWindow(QMainWindow):
         self._fill_presets()
         self._save_settings()
 
-    # ---------------------------------------------------------- caption styles
-    def _fill_captpl(self):
-        self.captpl_box.blockSignals(True)
-        self.captpl_box.clear()
-        self.captpl_box.addItem(tr("— template —"), None)
-        for name in presets.CAPTION_BUILTIN:
-            self.captpl_box.addItem(name, ("builtin", name))
-        for name in sorted(self.cap_templates):
-            self.captpl_box.addItem("★ " + name, ("user", name))
-        self.captpl_box.blockSignals(False)
+    # ------------------------------------------------- style templates
+    # Same recipe mechanism for three groups of controls: caption styles,
+    # audio (voice) chains and colour grades.  Each maps a group name to
+    # (combo attr, user-dict attr, builtin dict, saved keys, QSettings key).
+    _TPL_GROUPS = {
+        "cap":   ("captpl_box", "cap_templates", "CAPTION_BUILTIN", "CAPTION_KEYS"),
+        "audio": ("audtpl_box", "aud_templates", "AUDIO_BUILTIN", "AUDIO_KEYS"),
+        "grade": ("grdtpl_box", "grd_templates", "GRADE_BUILTIN", "GRADE_KEYS"),
+    }
 
-    def _apply_captpl(self, idx):
-        data = self.captpl_box.itemData(idx)
+    def _tpl_row(self, box, group):
+        """combo + Save + delete row for a template group."""
+        save = QPushButton(tr("Save"))
+        save.setFixedWidth(52)
+        save.clicked.connect(lambda: self._tpl_save(group))
+        dele = QPushButton("✕")
+        dele.setFixedWidth(32)
+        dele.clicked.connect(lambda: self._tpl_delete(group))
+        row = QHBoxLayout()
+        row.addWidget(box, 1)
+        row.addWidget(save)
+        row.addWidget(dele)
+        w = QWidget()
+        w.setLayout(row)
+        return w
+
+    def _tpl_fill(self, group):
+        box_attr, user_attr, builtin, _keys = self._TPL_GROUPS[group]
+        box = getattr(self, box_attr)
+        box.blockSignals(True)
+        box.clear()
+        box.addItem(tr("— template —"), None)
+        for name in getattr(presets, builtin):
+            box.addItem(name, ("builtin", name))
+        for name in sorted(getattr(self, user_attr)):
+            box.addItem("★ " + name, ("user", name))
+        box.blockSignals(False)
+
+    def _tpl_apply(self, group, idx):
+        box_attr, user_attr, builtin, _keys = self._TPL_GROUPS[group]
+        box = getattr(self, box_attr)
+        data = box.itemData(idx)
         if not data:
             return
         kind, name = data
-        values = presets.CAPTION_BUILTIN[name] if kind == "builtin" else self.cap_templates.get(name, {})
+        values = (getattr(presets, builtin)[name] if kind == "builtin"
+                  else getattr(self, user_attr).get(name, {}))
         for k, val in values.items():
             if k == "caption_font":
                 self.caption_font.setCurrentFont(QFont(val))
             else:
                 self._set(k, val)
-        self._log(tr("Caption style “%s” applied") % name)
+        self._log(tr("Template “%s” applied") % name)
 
-    def _save_captpl(self):
-        name, ok = QInputDialog.getText(self, tr("Save caption style"), tr("Style name:"))
+    def _tpl_save(self, group):
+        box_attr, user_attr, _b, keys = self._TPL_GROUPS[group]
+        name, ok = QInputDialog.getText(self, tr("Save template"), tr("Template name:"))
         name = (name or "").strip()
         if not ok or not name:
             return
-        self.cap_templates[name] = {k: self._val(k) for k in presets.CAPTION_KEYS}
-        self.cap_templates[name]["caption_font"] = self.caption_font.currentFont().family()
-        self._fill_captpl()
-        self.captpl_box.setCurrentIndex(self.captpl_box.findData(("user", name)))
+        store = getattr(self, user_attr)
+        store[name] = {k: self._val(k) for k in getattr(presets, keys)}
+        if group == "cap":
+            store[name]["caption_font"] = self.caption_font.currentFont().family()
+        self._tpl_fill(group)
+        getattr(self, box_attr).setCurrentIndex(
+            _data_index(getattr(self, box_attr), ("user", name)))
         self._save_settings()
 
-    def _delete_captpl(self):
-        data = self.captpl_box.currentData()
+    def _tpl_delete(self, group):
+        box_attr, user_attr, _b, _k = self._TPL_GROUPS[group]
+        box = getattr(self, box_attr)
+        data = box.currentData()
         if not data or data[0] != "user":
-            QMessageBox.information(self, APP_NAME, tr("Only styles you saved yourself (★) can be deleted."))
+            QMessageBox.information(self, APP_NAME,
+                                    tr("Only templates you saved yourself (★) can be deleted."))
             return
-        self.cap_templates.pop(data[1], None)
-        self._fill_captpl()
+        getattr(self, user_attr).pop(data[1], None)
+        self._tpl_fill(group)
         self._save_settings()
+
+    # caption templates keep their historical entry points
+    def _fill_captpl(self):
+        self._tpl_fill("cap")
+
+    def _apply_captpl(self, idx):
+        self._tpl_apply("cap", idx)
+
+    def _save_captpl(self):
+        self._tpl_save("cap")
+
+    def _delete_captpl(self):
+        self._tpl_delete("cap")
 
     # ---------------------------------------------------------- misc settings
     def _pick_music(self):
@@ -4129,6 +4181,14 @@ def _pixmap(kind: str, color: str) -> QPixmap:
             pt.drawRect(QRectF(21, y, 3, 3))
     pt.end()
     return QPixmap.fromImage(img)
+
+
+def _data_index(box: QComboBox, data) -> int:
+    """findData can't compare tuple payloads through QVariant."""
+    for i in range(box.count()):
+        if box.itemData(i) == data:
+            return i
+    return -1
 
 
 def _icon(kind: str) -> QIcon:

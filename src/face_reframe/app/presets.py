@@ -121,7 +121,7 @@ BUILTIN: Dict[str, dict] = {
 # the caption controls; the font family travels under "caption_font".
 CAPTION_KEYS = ("caption_style", "caption_words", "caption_max_dur", "caption_pos",
                 "caption_color", "caption_hl", "caption_upper", "caption_size",
-                "caption_box", "caption_anim")
+                "caption_box", "caption_anim", "caption_sweep", "caption_emoji")
 
 CAPTION_BUILTIN: Dict[str, dict] = {
     "Default": dict(caption_style="word", caption_words=3, caption_max_dur=1.6,
@@ -140,6 +140,88 @@ CAPTION_BUILTIN: Dict[str, dict] = {
                       caption_pos=0.88, caption_color="#FFFFFF", caption_hl="#FFD400",
                       caption_upper=False, caption_size=0.048, caption_box="none",
                       caption_anim="fade", caption_font="Georgia"),
+    "Karaoke neon": dict(caption_style="word", caption_words=2, caption_max_dur=1.2,
+                         caption_pos=0.72, caption_color="#FFFFFF", caption_hl="#4FD8FF",
+                         caption_upper=True, caption_size=0.09, caption_box="none",
+                         caption_anim="pop", caption_sweep=True, caption_font="Arial Black"),
+    "Podcast bold": dict(caption_style="line", caption_words=5, caption_max_dur=2.0,
+                         caption_pos=0.75, caption_color="#FFFFFF", caption_hl="#FFD400",
+                         caption_upper=True, caption_size=0.065, caption_box="pill",
+                         caption_anim="off", caption_font="Arial Black"),
+    "Emoji burst": dict(caption_style="word", caption_words=3, caption_max_dur=1.5,
+                        caption_pos=0.7, caption_color="#FFFFFF", caption_hl="#7CFF6B",
+                        caption_upper=True, caption_size=0.08, caption_box="none",
+                        caption_anim="pop", caption_emoji=True, caption_font="Arial Black"),
+    "Broadcast": dict(caption_style="line", caption_words=6, caption_max_dur=2.4,
+                      caption_pos=0.82, caption_color="#FFFFFF", caption_hl="#4FD8FF",
+                      caption_upper=False, caption_size=0.05, caption_box="pill",
+                      caption_anim="fade", caption_font="Helvetica"),
+}
+
+
+# Audio-chain recipes: the controls in the Audio tab that together make a
+# voice treatment.  "cinematic" is the master switch — every recipe assumes
+# it on except where stated.
+AUDIO_KEYS = ("cinematic", "denoise", "denoise_engine", "dereverb", "warmth",
+              "presence", "air", "duck", "hum")
+
+AUDIO_BUILTIN: Dict[str, dict] = {
+    "Podcast voice": dict(cinematic=True, denoise=10, denoise_engine="rnn",
+                          dereverb=8, warmth=1.6, presence=2.2, air=1.2,
+                          duck=6.0, hum=False),
+    "Clean studio": dict(cinematic=True, denoise=6, denoise_engine="rnn",
+                         dereverb=4, warmth=1.6, presence=2.0, air=1.4,
+                         duck=3.0, hum=False),
+    "Noisy room": dict(cinematic=True, denoise=20, denoise_engine="dfn",
+                       dereverb=18, warmth=0.0, presence=3.0, air=0.5,
+                       duck=6.0, hum=True),
+    "Phone recording": dict(cinematic=True, denoise=18, denoise_engine="dfn",
+                            dereverb=15, warmth=0.8, presence=3.0, air=1.8,
+                            duck=6.0, hum=True),
+    "Voice memo / webcam": dict(cinematic=True, denoise=16, denoise_engine="fft",
+                                dereverb=10, warmth=0.5, presence=2.5, air=1.0,
+                                duck=6.0, hum=False),
+    "Music + voice": dict(cinematic=True, denoise=8, denoise_engine="rnn",
+                          dereverb=6, warmth=1.2, presence=2.0, air=1.2,
+                          duck=12.0, hum=False),
+}
+
+
+# Colour-grade recipes: base look + the manual grade dials in the Colour tab.
+GRADE_KEYS = ("look", "look_strength", "auto_wb", "color_temp", "color_tint",
+              "color_exp", "color_con", "color_sat", "color_shad", "color_high",
+              "color_vig")
+
+GRADE_BUILTIN: Dict[str, dict] = {
+    # color_con/color_sat are 0..2 multipliers centred on 1.0
+    "Moody dark": dict(look="none", look_strength=1.0, auto_wb=False,
+                       color_temp=-0.1, color_tint=0.0, color_exp=-0.1, color_con=1.15,
+                       color_sat=0.9, color_shad=-0.15, color_high=0.0,
+                       color_vig=0.2),
+    "Bright clean": dict(look="none", look_strength=1.0, auto_wb=True,
+                         color_temp=0.05, color_tint=0.0, color_exp=0.15, color_con=1.05,
+                         color_sat=1.05, color_shad=0.1, color_high=0.0,
+                         color_vig=0.0),
+    "Warm film": dict(look="warm", look_strength=0.8, auto_wb=False,
+                      color_temp=0.15, color_tint=0.0, color_exp=0.0, color_con=1.1,
+                      color_sat=0.95, color_shad=0.0, color_high=-0.05,
+                      color_vig=0.15),
+    "Cinema punch": dict(look="cine", look_strength=1.0, auto_wb=False,
+                         color_temp=0.0, color_tint=0.0, color_exp=0.0, color_con=1.12,
+                         color_sat=1.1, color_shad=-0.08, color_high=0.0,
+                         color_vig=0.18),
+    "B&W studio": dict(look="bw", look_strength=1.0, auto_wb=False,
+                       color_temp=0.0, color_tint=0.0, color_exp=0.05, color_con=1.2,
+                       color_sat=1.0, color_shad=0.0, color_high=0.0,
+                       color_vig=0.2),
+    "Soft pastel": dict(look="none", look_strength=1.0, auto_wb=True,
+                        color_temp=0.05, color_tint=0.0, color_exp=0.1, color_con=0.92,
+                        color_sat=0.8, color_shad=0.08, color_high=0.0,
+                        color_vig=0.0),
+    "Neon night": dict(look="cool", look_strength=1.0, auto_wb=False,
+                       color_temp=-0.15, color_tint=0.0, color_exp=0.0, color_con=1.12,
+                       color_sat=1.15, color_shad=-0.1, color_high=0.0,
+                       color_vig=0.25),
 }
 
 

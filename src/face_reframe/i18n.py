@@ -774,6 +774,14 @@ _IT = {
     "Caption style “%s” applied": "Stile sottotitoli “%s” applicato",
     "Only styles you saved yourself (★) can be deleted.":
         "Puoi eliminare solo gli stili salvati da te (★).",
+    "Voice preset": "Preset voce",
+    "Grade template": "Modello colore",
+    "Base look": "Look di base",
+    "Save template": "Salva modello",
+    "Template name:": "Nome modello:",
+    "Template “%s” applied": "Modello “%s” applicato",
+    "Only templates you saved yourself (★) can be deleted.":
+        "Puoi eliminare solo i modelli salvati da te (★).",
     "Blade at %s — press B at the other end to cut":
         "Lama a %s — premi B all'altro capo per tagliare",
     "Cut %s to end": "Taglia da %s alla fine",
