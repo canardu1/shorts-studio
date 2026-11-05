@@ -92,7 +92,7 @@ def test_preview_titles_logo_zones_look(win, tmp_path):
     win._replan()
     assert isinstance(win._burner, Chain) and len(win._burner.parts) >= 3   # captions+hook+logo+cta
     assert win._look is not None and win._look.look == "warm"
-    win.zones_box.setCurrentIndex(win.zones_box.findData("tiktok"))
+    win._set_zones("tiktok")
     win._show_frame(5)
     assert win.out_view.zones
     # custom hook typed in the field wins over the first sentence

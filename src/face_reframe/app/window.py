@@ -17,8 +17,8 @@ import numpy as np
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import QObject, QPointF, QRectF, QSettings, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import (QColor, QDesktopServices, QFont, QIcon, QImage, QKeySequence, QPainter,
-                           QPalette, QPen, QPixmap, QPolygonF, QShortcut)
+from PySide6.QtGui import (QAction, QActionGroup, QColor, QDesktopServices, QFont, QIcon, QImage,
+                           QKeySequence, QPainter, QPalette, QPen, QPixmap, QPolygonF, QShortcut)
 from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractSpinBox, QApplication, QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDoubleSpinBox,
     QDialog, QFileDialog, QFontComboBox, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
@@ -297,6 +297,7 @@ class MainWindow(QMainWindow):
         self.removed = []                        # preview: cut ranges (s), source timeline
         self._blade = None                       # pending blade mark (s) for B-key cuts
         self._split = None
+        self._zones = None              # preview safe-zone overlay: tiktok|reels|shorts|None
         self._punch = None
         self._burner = None
         self._renderer = None
@@ -375,6 +376,7 @@ class MainWindow(QMainWindow):
         vlay.addWidget(vs, 1)
         self.setCentralWidget(central)
 
+        self._build_menus()
         self._load_settings()
         self._sync_undo()
         QTimer.singleShot(400, self._offer_restore)
@@ -408,13 +410,68 @@ class MainWindow(QMainWindow):
         lay.addWidget(a)
         lay.addWidget(b)
         lay.addStretch(1)
-        po = QPushButton(tr("Open project…"))
-        po.clicked.connect(self._open_project)
-        ps = QPushButton(tr("Save project…"))
-        ps.clicked.connect(self._save_project)
-        lay.addWidget(po)
-        lay.addWidget(ps)
         return bar
+
+    def _act(self, menu, text, fn, *shortcuts, checkable=False):
+        a = QAction(tr(text), self)
+        if shortcuts:
+            a.setShortcuts([QKeySequence(s) for s in shortcuts])
+        if checkable:
+            a.setCheckable(True)
+        a.triggered.connect(fn)
+        menu.addAction(a)
+        return a
+
+    def _build_menus(self):
+        """The app-level actions live in the system menu bar, not on buttons."""
+        mb = self.menuBar()
+        m = mb.addMenu(tr("File"))
+        self._act(m, "Open project…", self._open_project, QKeySequence.Open)
+        self._act(m, "Save project…", self._save_project, QKeySequence.Save)
+        m.addSeparator()
+        self._act(m, "Add videos…", self._add_dialog, "Ctrl+Shift+O")
+        self._act(m, "Add folder…", self._add_folder)
+        m.addSeparator()
+        self._act(m, "Create short", self._start, "Ctrl+E")
+
+        m = mb.addMenu(tr("Edit"))
+        self.undo_act = self._act(m, "Undo", self._shortcut_undo, QKeySequence.Undo)
+        self.redo_act = self._act(m, "Redo", self._shortcut_redo,
+                                QKeySequence.Redo, "Ctrl+Shift+Z")
+        m.addSeparator()
+        self._act(m, "Edit subtitles…", self._open_subeditor)
+        self._act(m, "Auto crop from here", self._manual_auto_here)
+        self._act(m, "Clear corrections", self._manual_clear)
+
+        m = mb.addMenu(tr("Tools"))
+        self._act(m, "Analyze faces", self._analyze)
+        self._act(m, "Transcribe", self._transcribe)
+        m.addSeparator()
+        self._act(m, "Find the best moments", self._find_highlights)
+        self._act(m, "Title, description & hashtags…", self._show_social)
+        self._act(m, "Thumbnails…", self._open_thumbs)
+
+        m = mb.addMenu(tr("Playback"))
+        self._act(m, "Play / Pause", self._toggle_play, "Space")
+        self._act(m, "Mute preview", self._toggle_mute, "M")
+        ab = self._act(m, "Hear original (A/B)", self.ab_btn.toggle, checkable=True)
+        self.ab_btn.toggled.connect(ab.setChecked)
+
+        m = mb.addMenu(tr("View"))
+        sm = m.addMenu(tr("Safe zones"))
+        grp = QActionGroup(self)
+        for label, key in ((tr("Off"), None), ("TikTok", "tiktok"),
+                           ("Reels", "reels"), ("Shorts", "shorts")):
+            a = QAction(label, self, checkable=True)
+            a.setData(key)
+            grp.addAction(a)
+            sm.addAction(a)
+        grp.actions()[0].setChecked(True)
+        grp.triggered.connect(lambda a: self._set_zones(a.data()))
+
+    def _set_zones(self, key):
+        self._zones = key
+        self._refresh_frame()
 
     def _build_queue(self):
         box = QWidget()
@@ -454,15 +511,6 @@ class MainWindow(QMainWindow):
         hl_row.addWidget(self.hl_btn, 1)
         hl_row.addWidget(self.hl_count)
         lay.addLayout(hl_row)
-        srow = QHBoxLayout()
-        soc = QPushButton(tr("Title, description & hashtags…"))
-        soc.clicked.connect(self._show_social)
-        srow.addWidget(soc)
-        thb = QPushButton(tr("Thumbnails…"))
-        thb.setToolTip(tr("Click-worthy thumbnails for YouTube (16:9) and Shorts (9:16) from the best frames"))
-        thb.clicked.connect(self._open_thumbs)
-        srow.addWidget(thb)
-        lay.addLayout(srow)
         return box
 
     def _build_preview(self):
@@ -531,42 +579,13 @@ class MainWindow(QMainWindow):
         self.tr_btn = QPushButton(tr("Transcribe"))
         self.tr_btn.setToolTip(tr("Whisper: needed to see fillers, retakes and captions in the preview (the result is reused by the render)"))
         self.tr_btn.clicked.connect(self._transcribe)
-        self.sub_btn = QPushButton(tr("Captions…"))
-        self.sub_btn.setToolTip(tr("Fix the caption text before burning it into the video"))
-        self.sub_btn.clicked.connect(self._open_subeditor)
         self.enh_preview = QCheckBox(tr("Enhancement"))
         self.enh_preview.setToolTip(tr("Show the image enhancement in the vertical preview"))
         self.enh_preview.toggled.connect(self._refresh_frame)
-        self.auto_btn = QPushButton(tr("Auto from here"))
-        self.auto_btn.setToolTip(tr("From this frame on, the crop follows the face by itself again"))
-        self.auto_btn.clicked.connect(self._manual_auto_here)
-        self.clear_man_btn = QPushButton(tr("Clear corrections"))
-        self.clear_man_btn.clicked.connect(self._manual_clear)
         row.addWidget(self.analyze_btn)
         row.addWidget(self.tr_btn)
-        row.addWidget(self.sub_btn)
         row.addWidget(self.enh_preview)
-        self.zones_box = combo([(tr("Safe zones: off"), None), ("TikTok", "tiktok"), ("Reels", "reels"),
-                                ("Shorts", "shorts")])
-        self.zones_box.setToolTip(tr("Show the areas covered by the platform's interface"))
-        self.zones_box.currentIndexChanged.connect(self._refresh_frame)
-        row.addWidget(self.zones_box)
         row.addStretch(1)
-        row.addWidget(self.auto_btn)
-        row.addWidget(self.clear_man_btn)
-        self.undo_btn = QToolButton()
-        self.undo_btn.setText("↶")
-        self.undo_btn.setToolTip(tr("Undo (⌘Z): crop corrections, people, captions, title"))
-        self.undo_btn.clicked.connect(self._undo_action)
-        self.redo_btn = QToolButton()
-        self.redo_btn.setText("↷")
-        self.redo_btn.setToolTip(tr("Redo (⇧⌘Z)"))
-        self.redo_btn.clicked.connect(self._redo_action)
-        row.addWidget(self.undo_btn)
-        row.addWidget(self.redo_btn)
-        QShortcut(QKeySequence.Undo, self, self._shortcut_undo)
-        QShortcut(QKeySequence.Redo, self, self._shortcut_redo)
-        QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self._shortcut_redo)
         self.timeline.setFocusPolicy(Qt.ClickFocus)
         for seq, fn in (("X", self._cut_sel), ("B", self._blade_cut),
                         ("Backspace", self._restore_sel), ("Delete", self._restore_sel),
@@ -2380,8 +2399,8 @@ class MainWindow(QMainWindow):
         if self._burner is not None:
             out = self._burner(i, out)
         ow2, oh2 = output_size(self._val("aspect"), int(self._val("resolution")))
-        z = self.zones_box.currentData() if hasattr(self, "zones_box") else None
-        self.out_view.zones = SAFE_ZONES.get(z) if z and self._val("aspect") == "9:16" else None
+        self.out_view.zones = SAFE_ZONES.get(self._zones) \
+            if self._zones and self._val("aspect") == "9:16" else None
         self.out_view.set_frame(to_qimage(out), badge="%s · %dx%d" % (tag, ow2, oh2))
 
     def _beauty_settle(self):
@@ -3111,10 +3130,10 @@ class MainWindow(QMainWindow):
         self._undo_redo(self._redo, self._undo, tr("Redone"))
 
     def _sync_undo(self):
-        self.undo_btn.setEnabled(bool(self._undo))
-        self.redo_btn.setEnabled(bool(self._redo))
-        self.undo_btn.setToolTip(tr("Undo: ") + self._undo[-1][0] if self._undo else tr("Nothing to undo"))
-        self.redo_btn.setToolTip(tr("Redo: ") + self._redo[-1][0] if self._redo else tr("Nothing to redo"))
+        self.undo_act.setEnabled(bool(self._undo))
+        self.redo_act.setEnabled(bool(self._redo))
+        self.undo_act.setText(tr("Undo: ") + self._undo[-1][0] if self._undo else tr("Undo"))
+        self.redo_act.setText(tr("Redo: ") + self._redo[-1][0] if self._redo else tr("Redo"))
 
     def _shortcut_undo(self):
         fw = QApplication.focusWidget()
@@ -4068,6 +4087,7 @@ def apply_theme(app: QApplication):
 def main(argv=None) -> int:
     app = QApplication(sys.argv if argv is None else argv)
     app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_NAME)   # menu-bar title also when run from source
     i18n.set_lang(QSettings("face_reframe", "ShortsStudio").value("ui/lang", "en") or "en")
     apply_theme(app)
     win = MainWindow()
