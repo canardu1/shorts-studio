@@ -356,11 +356,13 @@ class MainWindow(QMainWindow):
         root.setHandleWidth(1)
         root.addWidget(self._build_queue())
         root.addWidget(self._build_preview())
-        root.addWidget(self._build_settings())
+        self._settings_col = self._build_settings()
+        root.addWidget(self._settings_col)
         root.setStretchFactor(0, 0)
         root.setStretchFactor(1, 1)
         root.setStretchFactor(2, 0)
         root.setSizes([270, 800, 410])
+        self._split_root = root
 
         vs = QSplitter(Qt.Vertical)
         vs.setHandleWidth(1)
@@ -1459,6 +1461,19 @@ class MainWindow(QMainWindow):
         geo = st.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)
+        sp = st.value("splitter")
+        if sp is not None:
+            self._split_root.restoreState(sp)
+        else:
+            QTimer.singleShot(0, self._fit_settings_panel)
+
+    def _fit_settings_panel(self):
+        """First launch: widen the settings column until its forms fit."""
+        need = max(410, min(self._settings_col.sizeHint().width(), 620))
+        sizes = self._split_root.sizes()
+        if len(sizes) == 3 and 0 < sizes[2] < need:
+            total = sum(sizes)
+            self._split_root.setSizes([sizes[0], max(300, total - sizes[0] - need), need])
 
     def _save_settings(self):
         st = self._settings()
@@ -1484,6 +1499,7 @@ class MainWindow(QMainWindow):
         st.setValue("presets", presets.dump_user(self.user_presets))
         st.setValue("cap_templates", presets.dump_user(self.cap_templates))
         st.setValue("geometry", self.saveGeometry())
+        st.setValue("splitter", self._split_root.saveState())
 
     def _sync_enabled(self):
         v = self._val
