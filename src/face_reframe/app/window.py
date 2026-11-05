@@ -309,6 +309,7 @@ class MainWindow(QMainWindow):
         self.aud_templates: Dict[str, dict] = {}
         self.grd_templates: Dict[str, dict] = {}
         self.exp_templates: Dict[str, dict] = {}
+        self.cam_templates: Dict[str, dict] = {}
         self.music_path = ""
         self.logo_path = ""
         self.lut_path = ""
@@ -686,6 +687,9 @@ class MainWindow(QMainWindow):
         W["max_zoom"] = dspin(1, 4, 0.1, 2.0, 1, "×")
         W["stride"] = combo([(tr("Every frame (slow)"), 1), (tr("Every 2 frames"), 2), (tr("Every 3 frames (fast)"), 3)])
         W["stride"].setCurrentIndex(1)
+        self.camtpl_box = QComboBox()
+        self.camtpl_box.activated.connect(lambda i: self._tpl_apply("camera", i))
+        f.addRow(tr("Camera style"), self._tpl_row(self.camtpl_box, "camera"))
         f.addRow(tr("Aspect"), W["aspect"])
         f.addRow(tr("Follow"), W["subject"])
         self.pick_obj_btn = QPushButton(tr("Pick object on this frame…"))
@@ -1477,10 +1481,12 @@ class MainWindow(QMainWindow):
         self.aud_templates = presets.load_user(st.value("aud_templates", "") or "")
         self.grd_templates = presets.load_user(st.value("grd_templates", "") or "")
         self.exp_templates = presets.load_user(st.value("exp_templates", "") or "")
+        self.cam_templates = presets.load_user(st.value("cam_templates", "") or "")
         self._fill_captpl()
         self._tpl_fill("audio")
         self._tpl_fill("grade")
         self._tpl_fill("export")
+        self._tpl_fill("camera")
         geo = st.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)
@@ -1524,6 +1530,7 @@ class MainWindow(QMainWindow):
         st.setValue("aud_templates", presets.dump_user(self.aud_templates))
         st.setValue("grd_templates", presets.dump_user(self.grd_templates))
         st.setValue("exp_templates", presets.dump_user(self.exp_templates))
+        st.setValue("cam_templates", presets.dump_user(self.cam_templates))
         st.setValue("geometry", self.saveGeometry())
         st.setValue("splitter", self._split_root.saveState())
 
@@ -1651,6 +1658,7 @@ class MainWindow(QMainWindow):
         "audio": ("audtpl_box", "aud_templates", "AUDIO_BUILTIN", "AUDIO_KEYS"),
         "grade": ("grdtpl_box", "grd_templates", "GRADE_BUILTIN", "GRADE_KEYS"),
         "export": ("exptpl_box", "exp_templates", "EXPORT_BUILTIN", "EXPORT_KEYS"),
+        "camera": ("camtpl_box", "cam_templates", "CAMERA_BUILTIN", "CAMERA_KEYS"),
     }
 
     def _tpl_row(self, box, group):

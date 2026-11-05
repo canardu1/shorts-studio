@@ -776,6 +776,7 @@ _IT = {
         "Puoi eliminare solo gli stili salvati da te (★).",
     "Voice preset": "Preset voce",
     "Platform preset": "Preset piattaforma",
+    "Camera style": "Stile camera",
     "Grade template": "Modello colore",
     "Base look": "Look di base",
     "Save template": "Salva modello",

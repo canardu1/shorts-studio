@@ -255,6 +255,34 @@ EXPORT_BUILTIN: Dict[str, dict] = {
 }
 
 
+# Camera-operator styles: how the virtual camera frames and moves —
+# orthogonal to content type (Interview + Tight works, so does Gaming +
+# Loose).  Who to follow stays a content choice, so subject/layout are
+# left out.
+CAMERA_KEYS = ("smoothing", "dead_zone", "max_speed", "zoom", "follow_vertical",
+               "face_pos", "look_room", "look_room_amount", "punch",
+               "punch_zoom", "wide_mode", "wide_threshold", "max_zoom")
+
+CAMERA_BUILTIN: Dict[str, dict] = {
+    "Tight podcast": dict(smoothing=0.5, dead_zone=0.03, max_speed=0.6, zoom=1.5,
+                          follow_vertical=True, face_pos=0.42, look_room=False,
+                          look_room_amount=0.1, punch=True, punch_zoom=1.2,
+                          wide_mode="zoom", wide_threshold=0.1, max_zoom=2.2),
+    "Loose cinematic": dict(smoothing=0.9, dead_zone=0.08, max_speed=0.35, zoom=1.15,
+                            follow_vertical=False, face_pos=0.38, look_room=True,
+                            look_room_amount=0.2, punch=False, punch_zoom=1.15,
+                            wide_mode="keep", wide_threshold=0.15, max_zoom=1.8),
+    "Sports follow": dict(smoothing=0.3, dead_zone=0.0, max_speed=1.6, zoom=1.3,
+                          follow_vertical=True, face_pos=0.4, look_room=False,
+                          look_room_amount=0.1, punch=False, punch_zoom=1.15,
+                          wide_mode="zoom", wide_threshold=0.08, max_zoom=2.5),
+    "Locked tripod": dict(smoothing=2.5, dead_zone=0.12, max_speed=0.25, zoom=1.1,
+                          follow_vertical=False, face_pos=0.4, look_room=False,
+                          look_room_amount=0.1, punch=False, punch_zoom=1.15,
+                          wide_mode="keep", wide_threshold=0.12, max_zoom=1.5),
+}
+
+
 def load_user(raw: str) -> Dict[str, dict]:
     try:
         data = json.loads(raw or "{}")
