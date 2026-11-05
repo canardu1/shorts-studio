@@ -123,7 +123,8 @@ class Enhancer:
                     # stall the caller for tens of seconds (or hang on low
                     # disk) — not worth it at our capped input size.
                     have = set(ort.get_available_providers())
-                    providers = [p for p in ("CUDAExecutionProvider",
+                    providers = [p for p in ("CoreMLExecutionProvider",
+                                             "CUDAExecutionProvider",
                                              "CPUExecutionProvider")
                                  if p in have]
                     self._sess = ort.InferenceSession(path, providers=providers)

@@ -132,7 +132,8 @@ def test_undo_redo_manual_and_person(win):
     assert win.hook_text.get(key, "") == ""
 
 
-def test_project_roundtrip_and_autosave(win, clip, tmp_path):
+def test_project_roundtrip_and_autosave(win, clip, tmp_path, monkeypatch):
+    monkeypatch.delenv("SHORTS_NO_RESTORE", raising=False)   # fixture blocks autosave writes
     key = os.path.abspath(clip)
     win._replan()
     win.slider.setValue(8)

@@ -17,7 +17,7 @@ import traceback
 import numpy as np
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import QObject, QPointF, QRectF, QSettings, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import QObject, QPointF, QRectF, QSettings, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot, QFileSystemWatcher
 from PySide6.QtGui import (QAction, QActionGroup, QColor, QDesktopServices, QFont, QIcon, QImage,
                            QKeySequence, QPainter, QPalette, QPen, QPixmap, QPolygonF, QShortcut)
 from PySide6.QtWidgets import (
@@ -364,6 +364,8 @@ class MainWindow(QMainWindow):
         self._skin = {}              # abs path -> measured SkinCorrection
         self._skin_view = None       # (key, correction at the current strength)
         self._voice = {}             # abs path -> voice-tagged speech spans (ECAPA)
+        self._speaker_names = {}     # abs path -> {speaker n: custom name}
+        self._queue_recs = {}        # undo records for queue removals
         self._voice_on = False       # a voice-id job is running
         self._feat_cache = {}        # per-source VAD/beat/cut results — replan must not rescan 30 min of PCM every time
         self._restorer = None        # preview face restorer (built in the background)
@@ -485,6 +487,7 @@ class MainWindow(QMainWindow):
         self._act(m, "Transcribe", self._transcribe)
         m.addSeparator()
         self._act(m, "Find the best moments", self._find_highlights)
+        self._act(m, "Export chapters…", self._export_chapters)
         self._act(m, "Title, description & hashtags…", self._show_social)
         self._act(m, "Thumbnails…", self._open_thumbs)
         m.addSeparator()
@@ -622,14 +625,57 @@ class MainWindow(QMainWindow):
         hl_spk.setToolTip(tr("ECAPA voice ID tags each suggested clip with who's talking — "
                              "then you can filter the list to a single voice"))
         lay.addWidget(hl_spk)
+        hl_dd = self.w["hl_dedup"] = QCheckBox(tr("Skip near-duplicate moments"))
+        hl_dd.setChecked(True)
+        hl_dd.setToolTip(tr("When the same story is told twice, only the stronger take is "
+                            "suggested (semantic when the MiniLM check is on, word overlap "
+                            "otherwise)"))
+        lay.addWidget(hl_dd)
+        hl_lp = self.w["hl_loop"] = QCheckBox(tr("Snap clip ends for a seamless loop"))
+        hl_lp.setChecked(True)
+        hl_lp.setToolTip(tr("Nudges each clip's end to the frame that best matches its "
+                            "opening, so the short replays invisibly"))
+        lay.addWidget(hl_lp)
         spk_row = QHBoxLayout()
         spk_row.addWidget(QLabel(tr("Show moments of:")))
         self.hl_filter = QComboBox()
         self.hl_filter.addItem(tr("Everyone"), None)
         self.hl_filter.activated.connect(self._speaker_filter)
         spk_row.addWidget(self.hl_filter, 1)
+        self.hl_rename = QPushButton("✎")
+        self.hl_rename.setFixedWidth(26)
+        self.hl_rename.setToolTip(tr("Rename the selected speaker (e.g. “Marco”) — "
+                                     "kept in the project file"))
+        self.hl_rename.clicked.connect(self._rename_speaker)
+        spk_row.addWidget(self.hl_rename)
         lay.addLayout(spk_row)
         self._hl_filter_src = None
+        wrow = QHBoxLayout()
+        self.watch_btn = QPushButton(tr("Watch…"))
+        self.watch_btn.setToolTip(tr("Watch a folder: every new video dropped in is queued "
+                                     "(and rendered automatically when “Auto-render” is on)"))
+        self.watch_btn.clicked.connect(self._watch_choose)
+        self.watch_auto = self.w["watch_auto"] = QCheckBox(tr("Auto-render"))
+        self.watch_auto.setChecked(True)
+        self.watch_off = QPushButton("✕")
+        self.watch_off.setFixedWidth(26)
+        self.watch_off.setVisible(False)
+        self.watch_off.clicked.connect(lambda: self._watch_set(None))
+        wrow.addWidget(self.watch_btn)
+        wrow.addWidget(self.watch_auto, 1)
+        wrow.addWidget(self.watch_off)
+        lay.addLayout(wrow)
+        self.watch_lab = hint(tr("watch folder off"))
+        lay.addWidget(self.watch_lab)
+        self._watcher = QFileSystemWatcher(self)
+        self._watcher.directoryChanged.connect(lambda _p: self._watch_scan())
+        self._watch_dir = None
+        self._watch_seen = set()
+        self._watch_pending = {}
+        self._watch_timer = QTimer(self)
+        self._watch_timer.setInterval(1500)
+        self._watch_timer.timeout.connect(self._watch_tick)
+        self._watch_timer.start()
         lay.addWidget(hint(tr("Select a video in the list to preview it — “Find the best moments” "
                               "suggests clips, “Create short” renders.")))
         return box
@@ -1618,6 +1664,9 @@ class MainWindow(QMainWindow):
             self._split_root.restoreState(sp)
         else:
             QTimer.singleShot(0, self._fit_settings_panel)
+        wd = st.value("watch_dir", "") or ""
+        if wd and os.path.isdir(wd):
+            self._watch_set(wd)
 
     def _fit_settings_panel(self):
         """First launch: widen the settings column until its forms fit."""
@@ -1654,6 +1703,7 @@ class MainWindow(QMainWindow):
         st.setValue("grd_templates", presets.dump_user(self.grd_templates))
         st.setValue("exp_templates", presets.dump_user(self.exp_templates))
         st.setValue("cam_templates", presets.dump_user(self.cam_templates))
+        st.setValue("watch_dir", self._watch_dir or "")
         st.setValue("geometry", self.saveGeometry())
         st.setValue("splitter", self._split_root.saveState())
 
@@ -1941,17 +1991,117 @@ class MainWindow(QMainWindow):
         if d:
             self.add_files([d])
 
+    # ---------------------------------------------------------------- watch folder
+    def _watch_choose(self):
+        d = QFileDialog.getExistingDirectory(self, tr("Watch folder"),
+                                             self._watch_dir or "")
+        if d:
+            self._watch_set(d)
+
+    def _watch_set(self, d):
+        for p in self._watcher.directories():
+            self._watcher.removePath(p)
+        self._watch_dir = d
+        self._watch_seen = set()
+        self._watch_pending = {}
+        if d:
+            self._watcher.addPath(d)
+            self.watch_lab.setText("👁 " + os.path.basename(d.rstrip("/")) or d)
+            self.watch_lab.setToolTip(d)
+            self.watch_off.setVisible(True)
+            self._watch_scan()
+        else:
+            self.watch_lab.setText(tr("watch folder off"))
+            self.watch_lab.setToolTip("")
+            self.watch_off.setVisible(False)
+        self._save_settings()
+
+    def _watch_scan(self):
+        if not self._watch_dir:
+            return
+        have = set(self._paths()) | set(self._watch_pending) | self._watch_seen
+        try:
+            names = sorted(os.listdir(self._watch_dir))
+        except OSError:
+            return
+        for n in names:
+            p = os.path.join(self._watch_dir, n)
+            if os.path.splitext(n)[1].lower() not in VIDEO_EXT or p in have:
+                continue
+            try:
+                self._watch_pending[p] = (os.path.getsize(p), 0)
+            except OSError:
+                pass
+
+    def _watch_tick(self):
+        if not self._watch_dir:
+            return
+        self._watch_scan()
+        ready = []
+        for p, (size, n) in list(self._watch_pending.items()):
+            try:
+                cur = os.path.getsize(p)
+            except OSError:
+                del self._watch_pending[p]
+                continue
+            if cur != size or cur == 0:
+                self._watch_pending[p] = (cur, 0)
+            elif n >= 1:
+                ready.append(p)
+                del self._watch_pending[p]
+            else:
+                self._watch_pending[p] = (size, n + 1)
+        if ready:
+            self._watch_seen.update(ready)
+            self._log(tr("👁 Watch folder: %d new video(s) queued") % len(ready))
+            self.add_files(ready)
+            self._watch_maybe_render()
+
+    def _pending_rows(self, auto=False):
+        rows = []
+        for i in range(self.queue.count()):
+            qit = self.queue.item(i)
+            if qit.isHidden():
+                continue
+            data = qit.data(Qt.UserRole)
+            if auto and (data.get("outs") or data.get("failed")):
+                continue
+            rows.append(i)
+        return rows
+
+    def _watch_maybe_render(self):
+        if not self.watch_auto.isChecked() or self.batch is not None \
+                or not self._watch_dir:
+            return
+        if self._pending_rows(auto=True):
+            self._start(auto=True)
+
     def _update_count(self):
         n = sum(1 for i in range(self.queue.count()) if not self.queue.item(i).isHidden())
         self.drop_hint.setVisible(n == 0)
         self.start_btn.setText(tr("Create short") if n <= 1 else tr("Create %d shorts") % n)
 
     def _remove_selected(self):
-        for it in self.queue.selectedItems():
-            self.queue.takeItem(self.queue.row(it))
+        sel = sorted((self.queue.row(it) for it in self.queue.selectedItems()),
+                     reverse=True)
+        if not sel:
+            return
+        record = [(r, dict(self.queue.item(r).data(Qt.UserRole)))
+                  for r in sorted(sel)]
+        rec_id = "rm%d" % id(record)
+        self._queue_recs[rec_id] = record
+        n = len(record)
+        self._push_undo(tr("Remove %s") % (record[0][1]["label"] if n == 1
+                                           else tr("%d items") % n),
+                        "queue", rec_id, record)
+        for r in sel:
+            self.queue.takeItem(r)
         self._update_count()
 
     def _set_status(self, row: int, mark: str):
+        rows = getattr(self, "_batch_rows", None)
+        if rows and row < len(rows):
+            row = rows[row]
         it = self.queue.item(row)
         if it is not None:
             it.setText("%s  %s" % (mark, it.data(Qt.UserRole)["label"]))
@@ -3151,27 +3301,44 @@ class MainWindow(QMainWindow):
         self._find_moments(src, words, events)
 
     def _find_moments(self, src, words, events):
-        from .highlights import find_highlights
+        from .highlights import find_highlights, dedupe_highlights
         dur = self.reader.count / self.reader.fps if self.reader and self.current == src["path"] else words[-1].end
         n = self.hl_count.value()
+        dedup = self._val("hl_dedup")
+
+        def pick(hls, emb=None):
+            if dedup and hls:
+                before = len(hls)
+                hls = dedupe_highlights(hls, words, emb)
+                return hls[:n], before - len(hls)
+            return hls, 0
+
         if self._val("hl_semantic"):
             self._log(tr("Reading the transcript sentence by sentence (MiniLM)…"))
 
             def job(progress):
                 from .sembed import get
                 emb = get(progress, self.log_sig.emit)
-                return find_highlights(words, dur, count=n, events=events, embedder=emb)
+                hls = find_highlights(words, dur, count=n * 2 if dedup else n,
+                                      events=events, embedder=emb)
+                return pick(hls, emb)
 
             def fail(_e):
                 self._log(tr("Semantic check failed — using heuristics only"))
-                self._apply_highlights(src, find_highlights(words, dur, count=n, events=events))
+                hls, dropped = pick(find_highlights(words, dur, count=n * 2 if dedup else n,
+                                                    events=events))
+                self._apply_highlights(src, hls, dropped)
 
-            self._run(job, lambda hls: self._apply_highlights(src, hls),
+            self._run(job, lambda res: self._apply_highlights(src, res[0], res[1]),
                       tr("Best moments"), on_fail=fail)
             return
-        self._apply_highlights(src, find_highlights(words, dur, count=n, events=events))
+        hls, dropped = pick(find_highlights(words, dur, count=n * 2 if dedup else n,
+                                            events=events))
+        self._apply_highlights(src, hls, dropped)
 
-    def _apply_highlights(self, src, hls):
+    def _apply_highlights(self, src, hls, dropped: int = 0):
+        if dropped:
+            self._log(tr("Skipped %d near-duplicate moment(s)") % dropped)
         if not hls:
             self._log(tr("Video too short or no speech: no moments suggested"))
             return
@@ -3194,27 +3361,127 @@ class MainWindow(QMainWindow):
                         acc[s] = acc.get(s, 0) + ov
             return order.get(max(acc, key=acc.get)) if acc else None
 
+        if self._val("hl_loop"):
+            from ..loopmatch import suggest_loop_end
+            for h in hls:
+                h.end = suggest_loop_end(src["path"], h.start, h.end)
         present = []
         for k, h in enumerate(hls, 1 + n_existing):
             spk = speaker_of(h.start, h.end)
             if spk and spk not in present:
                 present.append(spk)
             title = h.title if len(h.title) <= 38 else h.title[:36] + "…"
-            tag = "  👤%d" % spk if spk else ""
-            self._add_item({"path": src["path"], "clip": (h.start, h.end), "stem": "%s_clip%d" % (base, k),
-                            "score": min(99, int(round(h.score * 20))), "speaker": spk,
-                            "label": "   ↳ %s–%s  🔥%d%s  %s" % (_fmt(h.start), _fmt(h.end),
-                                                              min(99, int(round(h.score * 20))), tag, title)},
-                           row + k - n_existing)
+            data = {"path": src["path"], "clip": (h.start, h.end),
+                    "stem": "%s_clip%d" % (base, k),
+                    "score": min(99, int(round(h.score * 20))), "speaker": spk,
+                    "title": title}
+            data["label"] = self._clip_label(data)
+            self._add_item(data, row + k - n_existing)
         self._hl_filter_src = src["path"]
-        self.hl_filter.clear()
-        self.hl_filter.addItem(tr("Everyone"), None)
-        for n in sorted(present):
-            self.hl_filter.addItem(tr("Speaker %d") % n, n)
-        self.hl_filter.setEnabled(len(present) > 1)
+        self._fill_speaker_filter(present)
         self._speaker_filter(0)
         self._log(tr("Found %d moments in %s: they're in the list under the video") % (len(hls), src["label"]))
         self._update_count()
+
+    def _speaker_tag(self, path: str, n) -> str:
+        name = (self._speaker_names.get(os.path.abspath(path)) or {}).get(n)
+        return "  " + name if name else ("  👤%d" % n if n else "")
+
+    def _clip_label(self, data: dict) -> str:
+        tag = self._speaker_tag(data["path"], data.get("speaker"))
+        return "   ↳ %s–%s  🔥%d%s  %s" % (_fmt(data["clip"][0]), _fmt(data["clip"][1]),
+                                         data.get("score", 0), tag,
+                                         data.get("title") or "")
+
+    def _fill_speaker_filter(self, present):
+        cur = self.hl_filter.currentData()
+        self.hl_filter.blockSignals(True)
+        self.hl_filter.clear()
+        self.hl_filter.addItem(tr("Everyone"), None)
+        src_names = self._speaker_names.get(os.path.abspath(self._hl_filter_src or "")) or {}
+        for n in sorted(present):
+            self.hl_filter.addItem(src_names.get(n) or tr("Speaker %d") % n, n)
+        idx = self.hl_filter.findData(cur)
+        self.hl_filter.setCurrentIndex(idx if idx >= 0 else 0)
+        self.hl_filter.blockSignals(False)
+        self.hl_filter.setEnabled(len(present) > 1)
+        self.hl_rename.setEnabled(len(present) > 0)
+
+    def _rename_speaker(self):
+        n = self.hl_filter.currentData()
+        if n is None or not self._hl_filter_src:
+            QMessageBox.information(self, APP_NAME,
+                                    tr("Pick a speaker in the filter first."))
+            return
+        key = os.path.abspath(self._hl_filter_src)
+        cur = (self._speaker_names.get(key) or {}).get(n) or ""
+        name, ok = QInputDialog.getText(self, tr("Rename speaker"),
+                                        tr("Name for Speaker %d:") % n, text=cur)
+        if not ok:
+            return
+        name = name.strip()
+        names = self._speaker_names.setdefault(key, {})
+        if name:
+            names[n] = name
+        else:
+            names.pop(n, None)
+        for r in range(self.queue.count()):
+            it = self.queue.item(r)
+            d = it.data(Qt.UserRole)
+            if d.get("clip") and d["path"] == self._hl_filter_src and d.get("speaker") == n:
+                d = dict(d)
+                d["label"] = self._clip_label(d)
+                it.setData(Qt.UserRole, d)
+                it.setText(it.text()[0] + "  " + d["label"])
+        present = sorted({it.get("speaker") for it in self._items()
+                          if it.get("clip") and it["path"] == self._hl_filter_src}
+                         - {None})
+        self._fill_speaker_filter(present)
+        self._speaker_filter(self.hl_filter.currentIndex())
+        self._schedule_autosave()
+
+    def _export_chapters(self):
+        """Best moments → chapter marks on the *source* timeline: paste into a
+        YouTube description or import the CSV into an editor/spreadsheet."""
+        items = [it for it in self._items() if it.get("clip")]
+        if not items:
+            QMessageBox.information(self, APP_NAME,
+                                    tr("Find the best moments first."))
+            return
+        src = os.path.splitext(items[0]["path"])[0]
+        path, flt = QFileDialog.getSaveFileName(
+            self, tr("Export chapters"), src + "_chapters.txt",
+            tr("YouTube chapters (*.txt);;Markers (*.csv)"))
+        if not path:
+            return
+        if ".csv" in flt or path.endswith(".csv"):
+            if not path.endswith(".csv"):
+                path += ".csv"
+            rows = ["start,end,title,score,speaker"]
+            for it in sorted(items, key=lambda d: (d["path"], d["clip"][0])):
+                t0, t1 = it["clip"]
+                nm = self._speaker_tag(it["path"], it.get("speaker")).strip()
+                title = (it.get("title") or "").replace('"', "'")
+                rows.append('%.2f,%.2f,"%s",%s,"%s"'
+                            % (t0, t1, title, it.get("score", ""), nm))
+            text = "\n".join(rows)
+        else:
+            if not path.endswith(".txt"):
+                path += ".txt"
+            lines = []
+            zero = not any(it["clip"][0] < 1.0 for it in items)
+            if zero:
+                lines.append("0:00 Intro")
+            for it in sorted(items, key=lambda d: (d["path"], d["clip"][0])):
+                t0 = int(it["clip"][0])
+                nm = self._speaker_tag(it["path"], it.get("speaker")).strip()
+                title = it.get("title") or it.get("stem") or ""
+                lines.append("%d:%02d %s%s" % (t0 // 60, t0 % 60,
+                                               (nm + " — ") if nm else "", title))
+            text = "\n".join(lines)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text + "\n")
+        self._log(tr("✓ Chapters saved: %s") % path)
 
     def _speaker_filter(self, i):
         want = self.hl_filter.itemData(i)
@@ -3405,6 +3672,8 @@ class MainWindow(QMainWindow):
             return None
         if kind == "person":
             return self.person_pick.get(key)
+        if kind == "queue":
+            return self._queue_recs.get(key)
         if kind == "hook":
             return self.hook_text.get(key, "")
         if kind == "words":
@@ -3435,6 +3704,23 @@ class MainWindow(QMainWindow):
                 self.person_pick[key] = val
             else:
                 self.person_pick.pop(key, None)
+        elif kind == "queue":
+            rec = val or self._queue_recs.get(key) or []
+
+            def same(d, dd):
+                return d["path"] == dd["path"] and d.get("clip") == dd.get("clip") \
+                    and d["label"] == dd["label"]
+
+            present = [i for i in range(self.queue.count())
+                       if any(same(self.queue.item(i).data(Qt.UserRole), dd)
+                              for _r, dd in rec)]
+            if present:
+                for i in reversed(present):
+                    self.queue.takeItem(i)
+            else:
+                for r, data in rec:
+                    self._add_item(dict(data), min(r, self.queue.count()))
+            self._update_count()
         elif kind == "hook":
             self.hook_text[key] = val or ""
         elif kind == "words" and val is not None:
@@ -3493,7 +3779,8 @@ class MainWindow(QMainWindow):
                 opts[name] = wd.isChecked()
         items = []
         for it in self._items():
-            d = {k: it[k] for k in ("path", "label", "clip", "stem") if k in it}
+            d = {k: it[k] for k in ("path", "label", "clip", "stem", "score",
+                                    "speaker", "title") if k in it}
             if "clip" in d:
                 d["clip"] = list(d["clip"])
             items.append(d)
@@ -3513,6 +3800,8 @@ class MainWindow(QMainWindow):
             "bg_color": self.bg_color, "caption_font": self.caption_font.currentFont().family(),
             "lut_path": self.lut_path or "",
             "out_dir": self.out_dir.text(), "suffix": self.suffix.text(),
+            "speaker_names": {k: {str(n): name for n, name in v.items()}
+                              for k, v in self._speaker_names.items() if v},
             "current": self.current or "",
         }
 
@@ -3556,6 +3845,17 @@ class MainWindow(QMainWindow):
         self.cta_edit.setText(d.get("cta") or "")
         self.out_dir.setText(d.get("out_dir") or "")
         self.suffix.setText(d.get("suffix") or "_short")
+        self._speaker_names = {k: {int(n): name for n, name in v.items()}
+                               for k, v in (d.get("speaker_names") or {}).items()}
+        for r in range(self.queue.count()):
+            qit = self.queue.item(r)
+            dd = qit.data(Qt.UserRole)
+            if dd.get("clip") and dd.get("speaker") \
+                    and os.path.abspath(dd["path"]) in self._speaker_names:
+                dd = dict(dd)
+                dd["label"] = self._clip_label(dd)
+                qit.setData(Qt.UserRole, dd)
+                qit.setText(qit.text()[0] + "  " + dd["label"])
         self._undo.clear()
         self._redo.clear()
         self._sync_undo()
@@ -3968,11 +4268,21 @@ class MainWindow(QMainWindow):
         self._select(self.queue.currentItem())
 
     # ================================================================ batch
-    def _start(self):
-        items = [self.queue.item(i).data(Qt.UserRole) for i in range(self.queue.count())
-                 if not self.queue.item(i).isHidden()]
+    def _start(self, auto=False):
+        rows = self._pending_rows(auto=auto)
+        items = []
+        self._batch_rows = rows
+        for row in rows:
+            qit = self.queue.item(row)
+            data = dict(qit.data(Qt.UserRole))
+            if not auto:
+                data.pop("outs", None)
+                data.pop("failed", None)
+                qit.setData(Qt.UserRole, data)
+            items.append(data)
         if not items:
-            QMessageBox.information(self, APP_NAME, tr("Add at least one video."))
+            if not auto:
+                QMessageBox.information(self, APP_NAME, tr("Add at least one video."))
             return
         self._save_settings()
         if not self._confirm_restore_time(items):
@@ -4042,12 +4352,18 @@ class MainWindow(QMainWindow):
 
     def _on_file_done(self, i, ok, res):
         self._set_status(i, "●" if ok else "✕")
-        if ok:
-            it = self.queue.item(i)
-            if it is not None:
-                data = dict(it.data(Qt.UserRole))
+        rows = getattr(self, "_batch_rows", None)
+        row = rows[i] if rows and i < len(rows) else i
+        it = self.queue.item(row)
+        if it is not None:
+            data = dict(it.data(Qt.UserRole))
+            if ok:
                 data["outs"] = list(res)
-                it.setData(Qt.UserRole, data)
+                data.pop("failed", None)
+            else:
+                data["failed"] = True
+            it.setData(Qt.UserRole, data)
+        if ok:
             for out in res:
                 self._log(tr("✓ Created: %s") % out)
         else:
@@ -4058,6 +4374,7 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.stage_lab.setText(tr("Done"))
         self.batch = None
+        QTimer.singleShot(600, self._watch_maybe_render)
         self._refresh_cache_label()
 
     def _stop(self):

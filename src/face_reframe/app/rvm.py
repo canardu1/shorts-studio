@@ -48,7 +48,8 @@ def _sess():
         import onnxruntime as ort
         so = ort.SessionOptions()
         so.log_severity_level = 3
-        _SESS = ort.InferenceSession(rvm_model_path(), so, providers=["CPUExecutionProvider"])
+        from .. import models
+        _SESS = ort.InferenceSession(rvm_model_path(), so, providers=models.providers())
     return _SESS
 
 

@@ -146,7 +146,9 @@ class FaceRestorer:
             raise FileNotFoundError(tr("model %s not downloaded") % self.model.file)
         opts = ort.SessionOptions()
         opts.log_severity_level = 3
-        self.sess = ort.InferenceSession(model_path(key), opts, providers=["CPUExecutionProvider"])
+        from . import models
+        self.sess = ort.InferenceSession(model_path(key), opts,
+                                         providers=models.providers())
         self.inp = self.sess.get_inputs()[0].name
         self.fidelity, self.blend = float(fidelity), float(blend)
         self.max_faces, self.min_face = max_faces, min_face

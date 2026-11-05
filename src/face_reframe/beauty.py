@@ -81,8 +81,9 @@ class FaceParser:
             import onnxruntime as ort
             so = ort.SessionOptions()
             so.log_severity_level = 3
+            from . import models
             _PSESS = ort.InferenceSession(parse_model_path(), so,
-                                          providers=["CPUExecutionProvider"])
+                                          providers=models.providers())
         h, w = roi.shape[:2]
         x = cv2.resize(roi, (512, 512), interpolation=cv2.INTER_AREA)
         x = x[..., ::-1].astype(np.float32) / 255.0

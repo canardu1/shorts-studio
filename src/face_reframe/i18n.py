@@ -828,4 +828,31 @@ _IT = {
     "Off": "Spente",
     "Crash zoom uses the transcript's strong words (questions, exclamations, numbers, “never”, “secret”…) or, without a transcript, voice peaks. Cuts are the shot changes and the pause cuts. Beat-sync snaps the effects onto the beats of your music track (or the video's own audio). Everything is previewed in play; export cost is nearly zero.":
         "Il crash zoom usa le parole forti della trascrizione (domande, esclamazioni, numeri, “mai”, “segreto”…) o, senza trascrizione, i picchi vocali. I tagli sono i cambi scena e i tagli delle pause. Beat-sync aggancia gli effetti ai beat della traccia musicale (o dell'audio del video). Tutto in anteprima live; costo export quasi nullo.",
+    "Watch…": "Osserva…",
+    "Watch folder": "Cartella osservata",
+    "Watch a folder: every new video dropped in is queued (and rendered automatically when “Auto-render” is on)":
+        "Osserva una cartella: ogni nuovo video che ci trascini viene accodato (e renderizzato in automatico con “Auto-render” attivo)",
+    "Auto-render": "Auto-render",
+    "watch folder off": "osservazione spenta",
+    "👁 Watch folder: %d new video(s) queued": "👁 Cartella osservata: %d nuovo/i video in coda",
+    "Skip near-duplicate moments": "Salta i momenti quasi duplicati",
+    "When the same story is told twice, only the stronger take is suggested (semantic when the MiniLM check is on, word overlap otherwise)":
+        "Quando la stessa storia è raccontata due volte, viene suggerita solo la presa migliore (semantica con il controllo MiniLM attivo, sovrapposizione di parole altrimenti)",
+    "Skipped %d near-duplicate moment(s)": "Saltati %d momento/i quasi duplicati",
+    "Snap clip ends for a seamless loop": "Aggancia i finali per un loop invisibile",
+    "Nudges each clip's end to the frame that best matches its opening, so the short replays invisibly":
+        "Sposta il finale di ogni clip sul frame più simile all'apertura, così lo short riparte senza stacco",
+    "Rename the selected speaker (e.g. “Marco”) — kept in the project file":
+        "Rinomina la voce selezionata (es. “Marco”) — salvata nel progetto",
+    "Pick a speaker in the filter first.": "Scegli prima una voce nel filtro.",
+    "Rename speaker": "Rinomina voce",
+    "Name for Speaker %d:": "Nome per Voce %d:",
+    "Export chapters…": "Esporta capitoli…",
+    "Export chapters": "Esporta capitoli",
+    "Find the best moments first.": "Prima trova i momenti migliori.",
+    "YouTube chapters (*.txt);;Markers (*.csv)": "Capitoli YouTube (*.txt);;Marker (*.csv)",
+    "✓ Chapters saved: %s": "✓ Capitoli salvati: %s",
+    "Remove %s": "Rimuovi %s",
+    "%d items": "%d elementi",
+    "Add at least one video.": "Aggiungi almeno un video.",
 }

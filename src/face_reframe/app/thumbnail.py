@@ -54,7 +54,9 @@ class Segmenter:
         import onnxruntime as ort
         so = ort.SessionOptions()
         so.log_severity_level = 3
-        self.sess = ort.InferenceSession(path or seg_model_path(), so, providers=["CPUExecutionProvider"])
+        from .. import models
+        self.sess = ort.InferenceSession(path or seg_model_path(), so,
+                                         providers=models.providers())
         self.inp = self.sess.get_inputs()[0].name
 
     def __call__(self, img: np.ndarray, face=None) -> np.ndarray:

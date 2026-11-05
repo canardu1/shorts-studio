@@ -186,3 +186,46 @@ def find_highlights(words: Sequence, duration: float, count: int = 5,
         if len(picked) >= count:
             break
     return picked
+
+
+def _clip_text(words: Sequence, t0: float, t1: float) -> str:
+    return " ".join(x.text.strip() for x in words if x.end > t0 and x.start < t1)
+
+
+def dedupe_highlights(hls: List[Highlight], words: Sequence,
+                     embedder=None, cos_thresh: float = 0.90,
+                     jac_thresh: float = 0.75) -> List[Highlight]:
+    """Drop near-duplicate suggestions: the same story told twice at
+    different points of the video (temporal overlap is already excluded by
+    :func:`find_highlights`).  With ``embedder`` (MiniLM) the decision is
+    semantic; without it, a word-set Jaccard check still catches the obvious
+    repeats.  Keeps the higher-scored clip of each pair, preserves order."""
+    if len(hls) < 2:
+        return hls
+    texts = [_clip_text(words, h.start, h.end) for h in hls]
+    embs = None
+    if embedder is not None and any(texts):
+        try:
+            embs = embedder(texts)
+        except Exception:
+            embs = None
+        if embs is not None and len(embs) != len(hls):
+            embs = None
+    keep = [True] * len(hls)
+    for i in range(len(hls)):
+        for j in range(i + 1, len(hls)):
+            if not keep[i] or not keep[j]:
+                continue
+            dup = False
+            if embs is not None:
+                sim = float((embs[i] * embs[j]).sum())
+                dup = sim >= cos_thresh
+            elif texts[i] and texts[j]:
+                ta = set(texts[i].lower().split())
+                tb = set(texts[j].lower().split())
+                if ta and tb:
+                    dup = len(ta & tb) / len(ta | tb) >= jac_thresh
+            if dup:
+                drop = i if hls[i].score < hls[j].score else j
+                keep[drop] = False
+    return [h for h, k in zip(hls, keep) if k]

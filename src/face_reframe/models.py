@@ -94,14 +94,30 @@ def download(key: str, progress: Optional[Callable[[float], None]] = None) -> st
     return fetch(MODELS[key].url, dst, progress)
 
 
+def providers() -> List[str]:
+    """ONNX Runtime providers, best first: CoreML on Apple Silicon (measured
+    ~2.5x on the per-frame vision models), CPU elsewhere or under
+    ``SHORTS_CPU_ONLY``. ORT partitions graphs itself — nodes CoreML can't
+    run stay on CPU, so this degrades gracefully per model."""
+    if os.environ.get("SHORTS_CPU_ONLY"):
+        return ["CPUExecutionProvider"]
+    try:
+        import onnxruntime as ort
+        avail = ort.get_available_providers()
+    except ImportError:
+        return ["CPUExecutionProvider"]
+    return (["CoreMLExecutionProvider"] if "CoreMLExecutionProvider" in avail else []) + \
+        ["CPUExecutionProvider"]
+
+
 def session(key: str):
-    """Cached CPU-only :class:`onnxruntime.InferenceSession` for the model."""
+    """Cached :class:`onnxruntime.InferenceSession` for the model."""
     if key in _sessions:
         return _sessions[key]
     import onnxruntime as ort
     so = ort.SessionOptions()
     so.log_severity_level = 3
-    sess = ort.InferenceSession(path(key), so, providers=["CPUExecutionProvider"])
+    sess = ort.InferenceSession(path(key), so, providers=providers())
     _sessions[key] = sess
     return sess
 

@@ -62,12 +62,13 @@ def vad_probs(pcm: np.ndarray) -> Optional[np.ndarray]:
     try:
         if _vad_session is None:
             import onnxruntime as ort
+            from . import models
             so = ort.SessionOptions()
             so.inter_op_num_threads = so.intra_op_num_threads = 1
             so.enable_cpu_mem_arena = False
             so.log_severity_level = 4
             _vad_session = ort.InferenceSession(path, sess_options=so,
-                                                providers=["CPUExecutionProvider"])
+                                                providers=models.providers())
         chunks = np.ascontiguousarray(pcm[: n * VAD_CHUNK]).reshape(n, VAD_CHUNK)
         ctx = chunks[:, -VAD_CONTEXT:].copy()   # copy: don't scribble on caller's pcm
         ctx[-1] = 0
