@@ -6,7 +6,7 @@
 
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-e5484d.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-e5484d.svg)](pyproject.toml)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux-e5484d.svg)](#quick-start)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux-e5484d.svg)](#download--install--2-minutes-no-terminal)
 [![Runs offline](https://img.shields.io/badge/runs-100%25%20offline-e5484d.svg)](#models)
 
 <img src="docs/media/app.png" alt="Shorts Studio — the app" width="88%">
@@ -48,6 +48,21 @@ Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for **$15–30 
 | **DaVinci Resolve** | Free companion scripts | — |
 
 The honest trade-off: cloud tools offer web editors, team features and zero install. Shorts Studio is for creators who'd rather keep the footage — and the money — on their own machine.
+
+## Download & install — 2 minutes, no terminal
+
+**Mac with an Apple chip (M1, M2, M3, M4 — any Mac from late 2020 on):**
+
+1. **[⬇ Download the app](https://github.com/canardu1/shorts-studio/releases/latest/download/ShortsStudio-macOS-arm64.zip)**
+2. Double-click the downloaded file to unzip it
+3. Drag **Shorts Studio** into your **Applications** folder
+4. First launch only: **right-click the app → Open**, then **Open** again — macOS warns once because the app isn't signed with an Apple certificate, then it runs normally
+
+No installer, no account, no admin password. Each AI feature downloads its model **once** on first use (a few MB) — after that, everything works fully offline.
+
+**Your first short in 3 steps:** drop a video onto the list → **Analyze faces** → **Create short**. Everything else is optional tuning on the live preview.
+
+*Older Intel Mac, Linux, or prefer the terminal? → [advanced install](#advanced-install)*
 
 ## Features
 
@@ -137,13 +152,9 @@ Face Reframe (non-destructive Fusion keyframes or render), Cut Pauses/Fillers/Br
 
 <sub>The app's interface is in **English** by default; Italian is available from the Export tab (**UI language**, applies on restart).</sub>
 
-## Quick start
+## Advanced install
 
-### Download the app (no install) — macOS
-
-Grab **`ShortsStudio-macOS-arm64.zip`** from the [latest release](https://github.com/canardu1/shorts-studio/releases/latest), unzip, drag **Shorts Studio** to Applications. First launch: **right-click → Open** (the app is unsigned — macOS asks once, then it runs normally). Apple Silicon only; on Intel Macs use the installer below.
-
-### macOS — one command
+### macOS — one command (also for Intel Macs)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/canardu1/shorts-studio/main/install.sh | bash
@@ -161,7 +172,6 @@ face-reframe-app
 ```
 
 Standalone `.app` bundle: `packaging/build_mac.sh`.
-Typical flow: **add videos → Analyze faces → tune on the live preview → Create short.**
 Full option guide: [docs/shorts-studio.md](docs/shorts-studio.md).
 
 ### DaVinci Resolve scripts
