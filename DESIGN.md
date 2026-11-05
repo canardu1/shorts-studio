@@ -237,14 +237,6 @@ controls are pill groups on an `ink-raise` track; the active segment is an
   the rail pill is the only accent-dyed tab.
 - Must elide or wrap within the panel — overflow clipping is a defect.
 
-### Interface Thumbnails — the duotone rule
-Frames rendered as *chrome* (the people-pick strip, any non-preview
-thumbnail) are converted to the ink→coral duotone (`_duotone`): luminance
-mapped onto `#0b0b0e`→`#ff4d6d`. The preview stays the only full-colour
-thing in the window — the signature move of the whole system. Never
-duotone anything that previews actual output (crop preview, thumbnail
-composer, social preview): those must show true colours.
-
 ### List Items (queue)
 - Default: transparent, `text-primary`, `○` status mark prefix.
 - Selected: `tint-selected` surface + 3px coral bar at the leading edge.
@@ -292,5 +284,4 @@ composer, social preview): those must show true colours.
 - **Don't** put borders above 1px or offset shadows on cards — depth is
   tonal layering, not chrome.
 - **Don't** grow the type past 13px for chrome; the preview is the display.
-- **Don't** show a full-colour frame as interface chrome — duotone it.
 - **Don't** reach for a fourth typeface, ever.

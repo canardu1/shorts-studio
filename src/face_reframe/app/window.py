@@ -275,15 +275,6 @@ def section(text):
     return lab
 
 
-def _duotone(bgr: np.ndarray) -> np.ndarray:
-    """Map a frame's luminance onto the ink→coral ramp. Interface thumbnails
-    wear the app's palette so the preview stays the only full-colour thing."""
-    lum = (0.114 * bgr[..., 0] + 0.587 * bgr[..., 1] + 0.299 * bgr[..., 2]) / 255.0
-    lo = np.array([14, 11, 11], np.float32)      # BGR of #0b0b0e
-    hi = np.array([109, 77, 255], np.float32)    # BGR of #ff4d6d
-    return np.clip(lo + (hi - lo) * lum[..., None], 0, 255).astype(np.uint8)
-
-
 def _fmt(sec: float) -> str:
     sec = int(sec)
     return "%02d:%02d" % (sec // 60, sec % 60)
@@ -3283,7 +3274,7 @@ class MainWindow(QMainWindow):
                 crop = frame[y0:int(f.cy + 1.2 * r), x0:int(f.cx + r)]
                 if crop.size:
                     crop = cv2.resize(crop, (112, 112), interpolation=cv2.INTER_AREA)
-                    btn.setIcon(QIcon(QPixmap.fromImage(to_qimage(_duotone(crop)))))
+                    btn.setIcon(QIcon(QPixmap.fromImage(to_qimage(crop))))
             secs = int(p.samples * analysis.frame_count / max(1, len(analysis.samples)) / fps)
             btn.setToolTip(tr("Person %d · in %d shots · ~%ds on screen") % (p.id + 1, len(p.tracks), secs))
             self.people_group.addButton(btn, p.id)
@@ -3631,7 +3622,7 @@ class MainWindow(QMainWindow):
         t.start()
 
     def _autosave(self):
-        if not self.queue.count():
+        if not self.queue.count() or os.environ.get("SHORTS_NO_RESTORE"):
             return
         try:
             os.makedirs(os.path.dirname(self.autosave_path()), exist_ok=True)
