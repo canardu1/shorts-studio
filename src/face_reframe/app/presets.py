@@ -35,6 +35,85 @@ BUILTIN: Dict[str, dict] = {
     "Slow PC": dict(
         resolution=1280, preset="veryfast", stride=3, enhance="off", cinematic=False, restore="off",
     ),
+    # ---- content-type presets ----
+    "Gaming clip": dict(
+        subject="main", noface="object", smoothing=0.4, punch=True, punch_zoom=1.2,
+        cut_pauses=True, min_pause=0.35, cut_breaths=False, cut_fillers=True,
+        cut_retakes=False, cinematic=False, enhance="fast", subtitles="burn",
+        caption_style="word", caption_emoji=True, caption_sweep=True, hook="auto",
+        mv_push=True, mv_crash=True, mv_crash_amount=0.5, mv_shake=True,
+        mv_shake_amount=0.45, mv_transition="random", mv_every="alternate",
+        beat_sync=True, progress_bar="top",
+    ),
+    "Tutorial / how-to": dict(
+        subject="main", layout="single", smoothing=0.6, dead_zone=0.06, punch=False,
+        cut_pauses=True, min_pause=0.5, cut_breaths=True, cut_fillers=True,
+        cut_retakes=True, cinematic=True, enhance="fast", subtitles="burn",
+        caption_style="line",
+        mv_handheld=False, mv_push=False, mv_crash=False, mv_shake=False,
+        mv_transition="off",
+    ),
+    "Course / webinar": dict(
+        subject="main", layout="single", smoothing=0.7, punch=False,
+        cut_pauses=True, min_pause=0.8, cut_breaths=False, cut_fillers=True,
+        cut_retakes=False, cinematic=True, enhance="off", restore="off",
+        subtitles="burn", caption_style="line", caption_box="pill",
+        mv_handheld=False, mv_push=False, mv_crash=False, mv_shake=False,
+        mv_transition="off", look="none",
+    ),
+    "Storytime": dict(
+        subject="main", layout="single", smoothing=0.45, punch=True, punch_zoom=1.2,
+        cut_pauses=True, min_pause=0.35, cut_breaths=True, cut_fillers=True,
+        cut_retakes=True, cinematic=True, enhance="fast", subtitles="burn",
+        caption_style="word", caption_emoji=True, caption_sweep=True, hook="auto",
+        mv_push=True, mv_push_amount=0.4, mv_crash=True, mv_crash_amount=0.5,
+        mv_shake=True, mv_shake_amount=0.35, mv_transition="zoom",
+        mv_every="alternate", beat_sync=True, progress_bar="top",
+    ),
+    # pauses and breaths ARE the content — cut nothing, no loudness squashing
+    "ASMR / soft voice": dict(
+        subject="main", layout="single", smoothing=0.8, punch=False,
+        cut_pauses=False, cut_breaths=False, cut_fillers=False, cut_retakes=False,
+        cinematic=False, enhance="off", restore="off", subtitles="burn",
+        caption_style="line", caption_anim="fade", caption_box="none",
+        mv_handheld=False, mv_push=False, mv_crash=False, mv_shake=False,
+        mv_transition="off", progress_bar="off",
+    ),
+    "Sports / action": dict(
+        subject="main", noface="object", smoothing=0.35, punch=True, punch_zoom=1.25,
+        cut_pauses=True, min_pause=0.35, cut_breaths=False, cut_fillers=True,
+        cinematic=True, enhance="fast", stabilize=True, subtitles="burn",
+        caption_style="word",
+        mv_push=True, mv_crash=True, mv_crash_amount=0.6, mv_shake=True,
+        mv_shake_amount=0.5, mv_transition="whip", mv_every="all", beat_sync=True,
+    ),
+    "B-roll / product": dict(
+        subject="main", noface="object", smoothing=0.5, punch=False,
+        cut_pauses=False, cut_breaths=False, cut_fillers=False, cut_retakes=False,
+        cinematic=True, enhance="fast", stabilize=True, look="cine",
+        subtitles="burn", caption_style="line", caption_box="pill",
+        mv_push=True, mv_push_amount=0.3, mv_crash=False, mv_shake=False,
+        mv_transition="off",
+    ),
+    # the restoration pack: deinterlace/VFR run automatically on ingest anyway
+    "Archive restore": dict(
+        subject="main", smoothing=0.6, punch=False,
+        cut_pauses=False, cut_breaths=False, cut_fillers=False, cut_retakes=False,
+        cinematic=True, denoise_engine="dfn", hum=True,
+        enhance="ai", restore="gpen512", restore_blend=0.85, stabilize=True,
+        lowlight="sg_llie", subtitles="srt",
+        mv_handheld=False, mv_push=False, mv_crash=False, mv_shake=False,
+        mv_transition="off",
+    ),
+    "Music beat edit": dict(
+        subject="main", noface="object", smoothing=0.4, punch=False,
+        cut_pauses=False, cut_breaths=False, cut_fillers=False, cut_retakes=False,
+        cinematic=False, enhance="fast", subtitles="burn", caption_style="line",
+        caption_anim="pop",
+        mv_push=True, mv_push_amount=0.4, mv_crash=True, mv_crash_amount=0.5,
+        mv_shake=True, mv_shake_amount=0.4, mv_transition="random",
+        mv_every="all", beat_sync=True, progress_bar="top",
+    ),
 }
 
 
