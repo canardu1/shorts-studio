@@ -82,7 +82,7 @@ No installer, no account, no admin password. Each AI feature downloads its model
 
 ### ✂️ Editing
 - **Cut pauses** (Silero VAD or level/dB), **cut breaths**, **cut fillers**, **cut retakes** — last take wins
-- **Best moments finder** — strongest 30–60 s clips, boosted by **YAMNet** laughter/applause/music detection; optional **MiniLM** sentence embeddings (multilingual) check each clip is a complete thought — no mid-sentence starts, no topic switches halfway
+- **Best moments finder** — strongest 30–60 s clips, boosted by **YAMNet** laughter/applause/music detection; tick *"Check clips are complete thoughts"* and optional **MiniLM** sentence embeddings (multilingual, ~135 MB once) penalise clips that start mid-discussion or switch topic halfway
 - **Manual timeline editing** — drag a range, **X** to cut (amber, on top of the automatic cuts), right-click to restore; **B** marks a blade point, second **B** cuts between marks; selection **snaps** to shot cuts, markers and events; trim clip edges or cut to end from the same menu; everything undoable
 - **Clip ranges** + **batch** a whole folder
 
@@ -130,6 +130,7 @@ No installer, no account, no admin password. Each AI feature downloads its model
 ### 🧰 Workflow
 - Live side-by-side preview · safe-zone overlay for TikTok/Reels/Shorts
 - **Undo/redo**, **projects** with autosave, **presets**
+- Native **macOS menu bar** (File/Edit/Tools/Playback/View) with standard ⌘ shortcuts
 - Disk cache, proxies for 4K HEVC, VideoToolbox encoding
 
 </td>
