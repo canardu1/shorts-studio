@@ -642,6 +642,8 @@ class MainWindow(QMainWindow):
         spk_row = QHBoxLayout()
         spk_row.addWidget(QLabel(tr("Show moments of:")))
         self.hl_filter = QComboBox()
+        self.hl_filter.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.hl_filter.setMinimumContentsLength(12)
         self.hl_filter.addItem(tr("Everyone"), None)
         self.hl_filter.activated.connect(self._speaker_filter)
         spk_row.addWidget(self.hl_filter, 1)
@@ -845,6 +847,8 @@ class MainWindow(QMainWindow):
         prow.addWidget(QLabel("Preset"))
         self.preset_box = QComboBox()
         self.preset_box.setMinimumWidth(150)
+        self.preset_box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.preset_box.setMinimumContentsLength(14)
         self.preset_box.activated.connect(self._apply_preset)
         save = QPushButton(tr("Save…"))
         save.clicked.connect(self._save_preset)
@@ -1889,6 +1893,9 @@ class MainWindow(QMainWindow):
 
     def _tpl_row(self, box, group):
         """combo + Save + delete row for a template group."""
+        # long template names must not push Save/✕ out of the column
+        box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        box.setMinimumContentsLength(14)
         box.setToolTip(tr("Template: applies a saved recipe on top of the current preset — "
                           "everything else stays as you set it"))
         save = QPushButton(tr("Save"))
@@ -4098,6 +4105,10 @@ class MainWindow(QMainWindow):
             pass
 
     def _offer_restore(self):
+        # fired 400 ms after construction — only meaningful when the window
+        # is actually on screen (real launch), never for hidden/tool windows
+        if not self.isVisible():
+            return
         p = self.autosave_path()
         if self.queue.count() or not os.path.exists(p) or os.environ.get("SHORTS_NO_RESTORE"):
             return
