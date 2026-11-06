@@ -503,6 +503,25 @@ _IT = {
     "Open recent": "Apri recenti",
     "Clear": "Svuota",
     "  · ~%s": "  · ~%s",
+    "Snapping — silence edges, cuts, markers":
+        "Aggancio — bordi dei silenzi, tagli, marcatori",
+    "Zoom out": "Riduci",
+    "Zoom to fit": "Adatta alla vista",
+    "Zoom in": "Ingrandisci",
+    "Blade — click the timeline to mark, click again to cut (B)":
+        "Lama — clicca sulla timeline per marcare, di nuovo per tagliare (B)",
+    "Blade armed — click the timeline to mark, again to cut":
+        "Lama attiva — clicca sulla timeline per marcare, di nuovo per tagliare",
+    "Blade at %s — again at the other end to cut":
+        "Lama a %s — di nuovo all'altro capo per tagliare",
+    "Blade at %s — press B at the other end to cut":
+        "Lama a %s — premi B all'altro capo per tagliare",
+    "Blade: click to mark, click again to cut":
+        "Lama: clicca per marcare, clicca di nuovo per tagliare",
+    "Cut selection (X)": "Taglia selezione (X)",
+    "Restore under selection (⌫)": "Ripristina nella selezione (⌫)",
+    "Set clip start at playhead (I)": "Imposta inizio clip al playhead (I)",
+    "Set clip end at playhead (O)": "Imposta fine clip al playhead (O)",
     "invalid project file": "file di progetto non valido",
     "Select a video.": "Seleziona un video.",
     "You need a transcript first: press “Transcribe”.":

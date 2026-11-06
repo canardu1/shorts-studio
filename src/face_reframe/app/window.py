@@ -705,6 +705,50 @@ class MainWindow(QMainWindow):
         self.timeline = Timeline()
         self.timeline.seek.connect(self._seek)
         self.timeline.menu.connect(self._timeline_menu)
+        self.timeline.blade_at.connect(self._blade_at)
+
+        tbar = QHBoxLayout()
+        tbar.setSpacing(3)
+        tbar.addStretch(1)
+
+        def tsep():
+            f = QFrame()
+            f.setFixedSize(1, 12)
+            f.setStyleSheet("background: #2c2c36;")
+            tbar.addSpacing(4)
+            tbar.addWidget(f)
+            tbar.addSpacing(4)
+
+        def tl_btn(icon, tip, fn, checkable=False, accent=None):
+            b = QToolButton()
+            b.setIconSize(QSize(15, 15))
+            b.setFixedSize(27, 22)
+            b.setToolTip(tr(tip))
+            b.setIcon(_rail_icon(icon, accent) if accent else _icon(icon))
+            b.setCheckable(checkable)
+            (b.toggled if checkable else b.clicked).connect(fn)
+            tbar.addWidget(b)
+            return b
+
+        self.snap_btn = tl_btn("magnet", "Snapping — silence edges, cuts, markers",
+                               lambda on: setattr(self.timeline, "snaps_on", on),
+                               checkable=True, accent="#8be9fd")
+        self.snap_btn.setChecked(True)
+        tsep()
+        tl_btn("zout", "Zoom out", lambda: self.timeline.zoom_center(-1))
+        tl_btn("fit", "Zoom to fit", self.timeline.zoom_fit)
+        tl_btn("zin", "Zoom in", lambda: self.timeline.zoom_center(1))
+        tsep()
+        self.blade_btn = tl_btn("razor",
+                                "Blade — click the timeline to mark, click again to cut (B)",
+                                self._blade_mode_set, checkable=True, accent="#e5a00a")
+        tl_btn("cut", "Cut selection (X)", self._cut_sel)
+        tl_btn("restore", "Restore under selection (⌫)", self._restore_sel)
+        tsep()
+        tl_btn("mark_in", "Set clip start at playhead (I)", lambda: self._clip_io(True))
+        tl_btn("mark_out", "Set clip end at playhead (O)", lambda: self._clip_io(False))
+        tbar.addStretch(1)
+        lay.addLayout(tbar)
         lay.addWidget(self.timeline)
 
         card = QFrame()
@@ -4271,17 +4315,27 @@ class MainWindow(QMainWindow):
         self.timeline.clear_sel()
         self._cut_range(sel[0], sel[1])
 
+    def _blade_mode_set(self, on: bool):
+        self.timeline.set_blade_mode(on)
+        if on:
+            self._log(tr("Blade armed — click the timeline to mark, again to cut"))
+
     def _blade_cut(self):
         """B: first press marks the blade at the playhead, second cuts between
         the mark and the playhead — the fast way to take out a boring stretch."""
         if not self.current or not self.reader:
             return
-        t = self.timeline.pos / max(1.0, self.reader.fps)
+        self._blade_at(self.timeline.pos / max(1.0, self.reader.fps))
+
+    def _blade_at(self, t: float):
+        """Shared blade logic: first hit marks, second cuts mark→hit."""
+        if not self.current or not self.reader:
+            return
         if self._blade is None:
             self._blade = t
             self.timeline.blade = t
             self.timeline.update()
-            self._log(tr("Blade at %s — press B at the other end to cut") % _fmt(t))
+            self._log(tr("Blade at %s — again at the other end to cut") % _fmt(t))
             return
         a, b = sorted((self._blade, t))
         self._blade = None
@@ -4294,6 +4348,7 @@ class MainWindow(QMainWindow):
         if self._blade is not None:
             self._blade = None
             self.timeline.blade = None
+        self.blade_btn.setChecked(False)
         self.timeline.clear_sel()
 
     def _restore_sel(self):
@@ -4881,6 +4936,52 @@ def _pixmap(kind: str, color: str) -> QPixmap:
         for y in (11, 18):
             pt.drawRect(QRectF(8, y, 3, 3))
             pt.drawRect(QRectF(21, y, 3, 3))
+    elif kind == "magnet":
+        pt.setPen(line)
+        pt.setBrush(Qt.NoBrush)
+        pt.drawArc(QRectF(8, 5, 16, 16), 0, 180 * 16)
+        pt.drawLine(QPointF(8, 13), QPointF(8, 21))
+        pt.drawLine(QPointF(24, 13), QPointF(24, 21))
+        pt.drawLine(QPointF(8, 22), QPointF(12, 22))
+        pt.drawLine(QPointF(20, 22), QPointF(24, 22))
+    elif kind == "zin":
+        pt.setPen(line)
+        pt.drawLine(QPointF(16, 9), QPointF(16, 23))
+        pt.drawLine(QPointF(9, 16), QPointF(23, 16))
+    elif kind == "zout":
+        pt.setPen(line)
+        pt.drawLine(QPointF(9, 16), QPointF(23, 16))
+    elif kind == "fit":
+        pt.setPen(line)
+        pt.drawLine(QPointF(15, 15), QPointF(24, 6))
+        pt.drawPolyline(QPolygonF([QPointF(17, 6), QPointF(24, 6), QPointF(24, 13)]))
+        pt.drawLine(QPointF(17, 17), QPointF(8, 26))
+        pt.drawPolyline(QPolygonF([QPointF(15, 26), QPointF(8, 26), QPointF(8, 19)]))
+    elif kind == "razor":
+        pt.setPen(line)
+        pt.setBrush(Qt.NoBrush)
+        pt.drawPolygon(QPolygonF([QPointF(7, 10), QPointF(25, 10), QPointF(28, 16),
+                                  QPointF(25, 22), QPointF(7, 22), QPointF(4, 16)]))
+        pt.drawLine(QPointF(11, 16), QPointF(21, 16))
+    elif kind == "mark_in":
+        pt.setPen(line)
+        pt.drawPolyline(QPolygonF([QPointF(11, 7), QPointF(7, 7), QPointF(7, 25), QPointF(11, 25)]))
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        pt.drawPolygon(QPolygonF([QPointF(14, 12), QPointF(23, 16), QPointF(14, 20)]))
+    elif kind == "mark_out":
+        pt.setPen(line)
+        pt.drawPolyline(QPolygonF([QPointF(21, 7), QPointF(25, 7), QPointF(25, 25), QPointF(21, 25)]))
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        pt.drawPolygon(QPolygonF([QPointF(18, 12), QPointF(9, 16), QPointF(18, 20)]))
+    elif kind == "restore":
+        pt.setPen(line)
+        pt.setBrush(Qt.NoBrush)
+        pt.drawArc(QRectF(7, 8, 18, 18), 40 * 16, 290 * 16)
+        pt.setPen(Qt.NoPen)
+        pt.setBrush(c)
+        pt.drawPolygon(QPolygonF([QPointF(8.5, 4.5), QPointF(14.5, 8), QPointF(7.5, 11.5)]))
     pt.end()
     return QPixmap.fromImage(img)
 

@@ -55,6 +55,8 @@ class Timeline(QWidget):
     seek = Signal(int)
     menu = Signal(float, object)
     """Right-click: (seconds at cursor, global pos) for the edit menu."""
+    blade_at = Signal(float)
+    """Blade mode: left-click time — window marks or completes the cut."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -92,6 +94,9 @@ class Timeline(QWidget):
         self.snaps: List[float] = []
         """Snap targets in seconds (shot cuts, markers, events, clip edges,
         speech/silence boundaries)."""
+        self.snaps_on = True
+        self.blade_mode = False
+        """Armed by the toolbar razor: left-click marks/cuts instead of seeking."""
         self.thumb_fn: Optional[Callable[[int], object]] = None
         """frame index -> QImage thumbnail, set by the window (None in tests)."""
         self._thumb_tip: Optional[_ThumbTip] = None
@@ -143,6 +148,24 @@ class Timeline(QWidget):
             self.zoom, self.v0 = 1.0, 0.0
         else:
             self.v0 = max(0.0, min(self.n - self._span(), self.v0))
+
+    def zoom_fit(self):
+        self.zoom, self.v0 = 1.0, 0.0
+        self.update()
+
+    def zoom_center(self, steps: float):
+        """Toolbar zoom: anchor at the playhead when it's inside the view."""
+        px = self._x(self.pos)
+        if not (6 <= px <= self.width() - 6):
+            px = self.width() / 2.0
+        self.zoom_at(steps, px)
+
+    def set_blade_mode(self, on: bool):
+        self.blade_mode = on
+        self.setCursor(Qt.CrossCursor if on else Qt.ArrowCursor)
+        if on:
+            self._hide_thumb()
+        self.update()
 
     def zoom_at(self, steps: float, anchor_x: float):
         """steps > 0 zooms in (1.25 per wheel notch), anchored at cursor x."""
@@ -285,7 +308,7 @@ class Timeline(QWidget):
     def _t(self, ev) -> float:
         f = self._f(ev.position().x())
         t = max(0.0, min(self.n - 1, f)) / self.fps
-        if self.snaps:
+        if self.snaps_on and self.snaps:
             thr = 6.0 * self._span() / max(1.0, self.width() - 12) / self.fps   # ~6 px
             near = min(self.snaps, key=lambda s: abs(s - t))
             if abs(near - t) <= thr:
@@ -305,6 +328,9 @@ class Timeline(QWidget):
             self._pan_v0 = self.v0
             return
         if ev.button() == Qt.LeftButton:
+            if self.blade_mode:
+                self.blade_at.emit(self._t(ev))
+                return
             self._press_t = self._t(ev)
             self._moved = False
 
@@ -324,6 +350,9 @@ class Timeline(QWidget):
                 self._moved = True
             return
         t = self._t(ev)
+        if self.blade_mode:
+            self.setToolTip(tr("Blade: click to mark, click again to cut"))
+            return
         if any(a <= t < b for a, b in self.mcuts):
             self.setToolTip(tr("Manual cut — right-click to restore"))
         elif any(a <= t < b for a, b in self.removed):

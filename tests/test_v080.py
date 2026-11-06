@@ -289,3 +289,39 @@ def test_render_estimate_label(win, tmp_path):
     win._settings().setValue("renderTimes", "[]")
     win._update_count()
     assert "· ~" not in win.start_btn.text()
+
+
+# ------------------------------------------------- QoL: timeline toolbar
+def test_toolbar_zoom_and_snap(win):
+    tl = win.timeline
+    tl.resize(812, 56)
+    tl.set_data(25000, 25.0)
+    win.timeline.zoom_center(2)
+    assert tl.zoom > 1.0
+    tl.zoom_fit()
+    assert tl.zoom == 1.0
+    win.snap_btn.setChecked(False)
+    assert tl.snaps_on is False
+
+
+def test_blade_mode_marks_and_cuts(win, tmp_path):
+    import cv2
+    import numpy as np
+    p = str(tmp_path / "v.mp4")
+    w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*"mp4v"), 10, (160, 90))
+    for _ in range(50):
+        w.write(np.full((90, 160, 3), 128, np.uint8))
+    w.release()
+    win._add_item({"path": p, "label": "v.mp4"})
+    it = win.queue.item(0)
+    win.queue.setCurrentItem(it)
+    win._select(it)
+    win.blade_btn.setChecked(True)
+    assert win.timeline.blade_mode is True
+    win._blade_at(1.0)
+    assert win._blade == 1.0
+    win._blade_at(3.0)
+    key = os.path.abspath(p)
+    assert (1.0, 3.0) in (win.manual_cuts.get(key) or [])
+    win._clear_sel_blade()
+    assert win.blade_btn.isChecked() is False
