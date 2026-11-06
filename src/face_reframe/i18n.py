@@ -833,6 +833,8 @@ _IT = {
     "Watch a folder: every new video dropped in is queued (and rendered automatically when “Auto-render” is on)":
         "Osserva una cartella: ogni nuovo video che ci trascini viene accodato (e renderizzato in automatico con “Auto-render” attivo)",
     "Auto-render": "Auto-render",
+    "Off: new files just queue up. On: they also start rendering with the current settings, hands-off.":
+        "Off: i nuovi file si accodano e basta. On: partono anche in render con le impostazioni correnti, senza toccare nulla.",
     "watch folder off": "osservazione spenta",
     "👁 Watch folder: %d new video(s) queued": "👁 Cartella osservata: %d nuovo/i video in coda",
     "Skip near-duplicate moments": "Salta i momenti quasi duplicati",

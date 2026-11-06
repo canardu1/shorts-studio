@@ -656,7 +656,9 @@ class MainWindow(QMainWindow):
                                      "(and rendered automatically when “Auto-render” is on)"))
         self.watch_btn.clicked.connect(self._watch_choose)
         self.watch_auto = self.w["watch_auto"] = QCheckBox(tr("Auto-render"))
-        self.watch_auto.setChecked(True)
+        self.watch_auto.setToolTip(tr("Off: new files just queue up. On: they also start "
+                                      "rendering with the current settings, hands-off."))
+        self.watch_auto.setChecked(False)
         self.watch_off = QPushButton("✕")
         self.watch_off.setFixedWidth(26)
         self.watch_off.setVisible(False)
