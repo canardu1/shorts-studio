@@ -325,3 +325,20 @@ def test_blade_mode_marks_and_cuts(win, tmp_path):
     assert (1.0, 3.0) in (win.manual_cuts.get(key) or [])
     win._clear_sel_blade()
     assert win.blade_btn.isChecked() is False
+
+
+# ------------------------------------------------------- new colour grades
+def test_new_looks_render():
+    import numpy as np
+    from face_reframe.app.look import transform
+    x = np.random.RandomState(0).rand(40, 60, 3).astype(np.float32)
+    base = transform(x, "none", None, 1.0)
+    for k in ("urban", "tealorange", "neon", "glow", "y2k", "faded", "midnight"):
+        out = transform(x, k, None, 1.0)
+        assert out.shape == x.shape and out.min() >= 0 and out.max() <= 1
+        assert np.abs(out - base).max() > 0.01          # visibly different
+    from face_reframe.app.presets import GRADE_BUILTIN, GRADE_KEYS
+    for name in ("Urban", "Teal & orange", "Cyberpunk", "Golden hour",
+                 "Dreamy", "Y2K digicam", "Faded film", "Midnight", "Sunset"):
+        assert name in GRADE_BUILTIN
+        assert set(GRADE_BUILTIN[name]) <= set(GRADE_KEYS)

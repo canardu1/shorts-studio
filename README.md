@@ -39,7 +39,7 @@ Automatic 16:9 → 9:16 reframe · word-by-word captions + punch-in · manual ti
 - **Smarter best moments** — speaker-labelled clips (👤, rename to *Marco* with the ✎ and it sticks in the project), semantic **near-duplicate skipping**, **seamless-loop** end snapping, and **chapters export** for YouTube/CSV
 - **CLI v2** — `face_reframe render` runs the whole pipeline headless: presets, templates, `--moments N`, any option via `--set`
 - **CoreML on Apple Silicon** — vision models run up to ~2.6× faster (CPU fallback always available, `SHORTS_CPU_ONLY=1` to force)
-- **Template system everywhere** — 14 content presets × 4 camera styles × 6 voice chains × 7 colour grades × 8 caption styles × 5 platform exports, plus your own ★ templates
+- **Template system everywhere** — 14 content presets × 4 camera styles × 6 voice chains × 16 colour grades × 8 caption styles × 5 platform exports, plus your own ★ templates
 - **In-app update check**, undo on *Remove*, mono timecode font, spectrum settings rail
 
 <p align="center">
@@ -127,7 +127,7 @@ No installer, no account, no admin password. Each AI feature downloads its model
 - **Slow motion ×2/×4** — **RIFE** invents real in-between frames, or instant FFmpeg blend
 - **Face restoration:** GPEN-256/512, GFPGAN, CodeFormer — only on faces worth restoring (size + frontality gates), faded in over a few frames, source tones preserved
 - **Skin-tone fix** (exportable `.cube` LUT) · **Beauty** with neural face-parsing mask
-- **Colour:** 6 looks + **your own .cube LUTs** + auto WB + full manual **grade** (temp, tint, EV, contrast, sat, shadows, highlights, vignette)
+- **Colour:** 14 looks + **your own .cube LUTs** + auto WB + full manual **grade** (temp, tint, EV, contrast, sat, shadows, highlights, vignette)
 - **Lift dark shots** — SG-LLIE or URetinex neural low-light
 - **Blur background** — RVM fast or **MODNet** quality matting, guided-filter edges
 - **Enhance** — fast sharpen or Real-ESRGAN upscaling, **colour-locked** to the source so the palette can't drift or flicker

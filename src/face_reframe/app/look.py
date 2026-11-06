@@ -11,6 +11,9 @@ import numpy as np
 
 LOOKS = [("Natural", "none"), ("Warm", "warm"), ("Cool", "cool"), ("Cinematic (teal & orange)", "cine"),
          ("Pop (contrast & colour)", "pop"), ("Vintage", "vintage"), ("B&W", "bw"),
+         ("Urban", "urban"), ("Teal & orange", "tealorange"), ("Neon cyberpunk", "neon"),
+         ("Dreamy glow", "glow"), ("Y2K digicam", "y2k"), ("Faded film", "faded"),
+         ("Midnight blue", "midnight"),
          ("Custom .cube file…", "cube")]
 
 
@@ -175,6 +178,49 @@ def transform(rgb: np.ndarray, look: str, gains: Optional[Tuple[float, float, fl
     elif look == "bw":
         y = _luma(x)[..., None]
         x = np.repeat(_contrast(y, 1.12), 3, axis=-1)
+    elif look == "urban":
+        y = _luma(x)[..., None]
+        shadows = 1 - _smoothstep(y / 0.6)
+        x = x + shadows * np.array([-0.02, 0.025, 0.055], np.float32)   # teal-leaning shadows
+        x = _sat(x, 0.78)
+        x = _contrast(x, 1.1)
+        x = x * np.array([0.96, 1.0, 1.04], np.float32)                 # cold cast
+    elif look == "tealorange":
+        y = _luma(x)[..., None]
+        shadows = 1 - _smoothstep(y / 0.55)
+        highs = _smoothstep((y - 0.45) / 0.55)
+        x = x + shadows * np.array([-0.06, 0.02, 0.075], np.float32) \
+              + highs * np.array([0.075, 0.01, -0.08], np.float32)      # the punchy version of "cine"
+        x = _contrast(x, 1.1)
+        x = _sat(x, 1.05)
+    elif look == "neon":
+        y = _luma(x)[..., None]
+        shadows = 1 - _smoothstep(y / 0.55)
+        highs = _smoothstep((y - 0.45) / 0.55)
+        x = x + shadows * np.array([0.05, -0.02, 0.1], np.float32) \
+              + highs * np.array([-0.05, 0.04, 0.08], np.float32)        # magenta lows / cyan highs
+        x = _sat(x, 1.18)
+    elif look == "glow":
+        y = _luma(x)[..., None]
+        highs = _smoothstep((y - 0.4) / 0.6)
+        x = x + highs * np.float32(0.09)                                # pushed whites, bloom feel
+        x = _contrast(x, 0.92)
+        x = _sat(x, 0.95)
+        x = x * np.array([1.02, 0.99, 1.02], np.float32)                # soft warm-magenta
+    elif look == "y2k":
+        x = x * np.array([1.0, 1.03, 0.97], np.float32)                 # digicam green-cyan cast
+        x = _contrast(x, 0.92) + 0.04                                   # washed-out blacks
+        x = _sat(x, 0.9)
+    elif look == "faded":
+        x = 0.075 + x * 0.86                                            # matte: lifted blacks, soft whites
+        x = _sat(x, 0.72)
+        x = x * np.array([1.03, 1.0, 0.96], np.float32)
+    elif look == "midnight":
+        x = _sat(x, 0.55)
+        y = _luma(x)[..., None]
+        shadows = 1 - _smoothstep(y / 0.5)
+        x = x + shadows * np.array([-0.03, 0.01, 0.09], np.float32)     # deep navy shadows
+        x = _contrast(x, 1.18)
     x = base + (x - base) * strength
     return np.clip(x, 0, 1)
 
