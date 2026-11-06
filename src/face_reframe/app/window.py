@@ -322,7 +322,7 @@ class MainWindow(QMainWindow):
         self._people = []
         self._people_for = None
         self.pcm = {}                            # abs path -> 16 kHz audio (current file only)
-        self._wave_cache = {}                    # abs path -> timeline peak envelope
+        self._thumb_cache = {}                   # frame -> QImage for timeline hover thumbs
         self.removed = []                        # preview: cut ranges (s), source timeline
         self._blade = None                       # pending blade mark (s) for B-key cuts
         self._split = None
@@ -758,9 +758,13 @@ class MainWindow(QMainWindow):
         row.addWidget(self.enh_preview)
         row.addStretch(1)
         self.timeline.setFocusPolicy(Qt.ClickFocus)
+        self.timeline.thumb_fn = self._timeline_thumb
         for seq, fn in (("X", self._cut_sel), ("B", self._blade_cut),
                         ("Backspace", self._restore_sel), ("Delete", self._restore_sel),
-                        ("Escape", self._clear_sel_blade)):
+                        ("Escape", self._clear_sel_blade),
+                        ("Left", lambda: self._step(-1)), ("Right", lambda: self._step(1)),
+                        ("Shift+Left", lambda: self._step(-25)), ("Shift+Right", lambda: self._step(25)),
+                        ("I", lambda: self._clip_io(True)), ("O", lambda: self._clip_io(False))):
             sc = QShortcut(QKeySequence(seq), self.timeline)
             sc.setContext(Qt.WidgetWithChildrenShortcut)
             sc.activated.connect(fn)
@@ -2194,7 +2198,7 @@ class MainWindow(QMainWindow):
                 self.proxy.close()
                 self.proxy = None
             self.pcm = {}
-            self._wave_cache = {}
+            self._thumb_cache = {}
             self._feat_cache = {}
             self.removed = []
             self._blade = None
@@ -2537,30 +2541,29 @@ class MainWindow(QMainWindow):
         vsegs = self._voice.get(key) or []
         events = [vsegs[i][0] for i in range(1, len(vsegs))
                   if vsegs[i][2] != vsegs[i - 1][2] and vsegs[i][2] >= 0]
+        snap_pts = [t for sp in (speech_spans or []) for t in sp]
         self.timeline.set_data(self.reader.count, fps, self.removed, cuts, [m[0] for m in man],
                                self.clip_range, bool(words), events=events,
                                mcuts=self.manual_cuts.get(key) or [],
-                               wave=self._wave_env(key))
+                               wave=self.pcm.get(key), snaps=snap_pts)
         self._show_frame(self.slider.value())
 
-    def _wave_env(self, key):
-        """Peak envelope of the cached 16 kHz PCM for the timeline lane —
-        computed once per file (it is just a chunked abs-max)."""
-        pcm = self.pcm.get(key)
-        if pcm is None:
+    def _timeline_thumb(self, f: int):
+        """Small hover thumbnail for the timeline — cached so scrubbing back
+        and forth over the same stretch doesn't re-seek the reader."""
+        if not self.reader:
             return None
-        env = self._wave_cache.get(key)
-        if env is None:
-            a = np.abs(np.asarray(pcm, dtype=np.float32))
-            cols = 1600
-            if len(a) <= cols:
-                env = a
-            else:
-                n = len(a) // cols * cols
-                env = a[:n].reshape(-1, len(a) // cols).max(1)
-            m = float(env.max()) if len(env) else 0.0
-            self._wave_cache[key] = env / m if m > 0 else env
-        return self._wave_cache[key]
+        img = self._thumb_cache.get(f)
+        if img is None:
+            fr = self.reader.read(f)
+            if fr is None:
+                return None
+            from .preview import to_qimage
+            img = to_qimage(fr).scaledToWidth(160, Qt.SmoothTransformation)
+            self._thumb_cache[f] = img
+            if len(self._thumb_cache) > 64:
+                self._thumb_cache.pop(next(iter(self._thumb_cache)))
+        return img
 
     def _preview_size(self):
         ow, oh = output_size(self._val("aspect"), 1920)
@@ -2891,6 +2894,16 @@ class MainWindow(QMainWindow):
         f = max(lo, min(hi, f))
         self.slider.setValue(f)
         self._user_seek(f)
+
+    def _step(self, d: int):
+        """←/→ on the timeline: one frame (Shift: 25) back/forward."""
+        if self.reader:
+            self._seek(self.slider.value() + d)
+
+    def _clip_io(self, is_start: bool):
+        """I/O at the playhead: same trim as the edit menu's clip start/end."""
+        if self.reader:
+            self._clip_edge(is_start, self.slider.value() / self.reader.fps)
 
     # ---------------------------------------------------------- playback (+ audio)
     def _ensure_player(self) -> bool:
@@ -3719,12 +3732,15 @@ class MainWindow(QMainWindow):
             else:
                 self.manual_cuts.pop(key, None)
         elif kind == "clip":
-            for d in self._items():
+            for i in range(self.queue.count()):
+                qit = self.queue.item(i)
+                d = qit.data(Qt.UserRole)
                 if d and os.path.abspath(d["path"]) == key:
                     if val:
                         d["clip"] = tuple(val)
                     else:
                         d.pop("clip", None)
+                    qit.setData(Qt.UserRole, d)   # data() copies: write back
         elif kind == "person":
             if val:
                 self.person_pick[key] = val
@@ -4282,16 +4298,19 @@ class MainWindow(QMainWindow):
             data.pop("clip", None)
         else:
             data["clip"] = (a, b)
+        it.setData(Qt.UserRole, data)     # data() hands out a copy — write it back
         self._log(tr("Clip %s–%s") % (_fmt(a), _fmt(b)))
         self._select(it)        # reload with the new clip range
 
     def _clear_trim(self):
+        it = self.queue.currentItem()
         data = self._cur_item()
-        if data is None or not data.get("clip"):
+        if it is None or data is None or not data.get("clip"):
             return
         self._push_undo(tr("Clear clip trim"), "clip", os.path.abspath(self.current), data["clip"])
         data.pop("clip", None)
-        self._select(self.queue.currentItem())
+        it.setData(Qt.UserRole, data)
+        self._select(it)
 
     # ================================================================ batch
     def _start(self, auto=False):

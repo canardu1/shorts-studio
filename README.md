@@ -102,8 +102,9 @@ No installer, no account, no admin password. Each AI feature downloads its model
 - **Near-duplicate skipping** — the same story told twice keeps only the stronger take (MiniLM semantic match, or word overlap without it)
 - **Seamless-loop ends** — each clip's end snaps to the frame that best matches its opening, so the short replays invisibly
 - **Chapters export** — the moments become YouTube description chapters or CSV markers on the *source* timeline
-- **Manual timeline editing** — drag a range, **X** to cut (amber, on top of the automatic cuts), right-click to restore; **B** marks a blade point, second **B** cuts between marks; selection **snaps** to shot cuts, markers and events; trim clip edges or cut to end from the same menu; everything undoable
-- **Audio waveform lane** — the timeline shows a peak envelope above the cut bar, so dead air reads as flat stretches you can spot and cut at a glance
+- **Manual timeline editing** — drag a range, **X** to cut (amber, on top of the automatic cuts), right-click to restore; **B** marks a blade point, second **B** cuts between marks; **←/→** step a frame (⇧ = 25), **I/O** trim the clip at the playhead; selection **snaps** to shot cuts, markers, events and silence boundaries; everything undoable
+- **Audio waveform lane** — a peak envelope above the cut bar, so dead air reads as flat stretches you can spot and cut at a glance; **scroll to zoom** into the cut you're making (trackpad pan, middle-drag), the waveform re-resolves as you go
+- **Hover preview** — resting the cursor on the timeline pops the source frame + timecode, NLE-style
 - **Clip ranges** + **batch** a whole folder
 
 ### 💬 Captions

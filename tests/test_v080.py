@@ -193,25 +193,68 @@ def test_cli_render_list(capsys):
 
 
 # ------------------------------------------------------------- timeline wave
-def test_wave_envelope(win):
+def test_wave_cols_envelope(win):
     import numpy as np
+    tl = win.timeline
     pcm = np.zeros(16000 * 4, dtype=np.float32)
     pcm[16000:16000 * 2] = 0.8                      # loud second
     pcm[16000 * 3:16000 * 3 + 400] = 0.5            # short blip
-    win.pcm["/v/a.mp4"] = pcm
-    env = win._wave_env("/v/a.mp4")
-    assert env is not None and len(env) <= 1600
-    assert float(env.max()) == 1.0                  # normalised to peak
-    # the dead first second must read near zero in the envelope
-    dead = float(env[: len(env) // 4].max())
-    loud = float(env[len(env) // 4: len(env) // 2].max())
+    tl.set_data(100, 25.0, wave=pcm)
+    assert abs(tl._wave_peak - 0.8) < 1e-6
+    env = tl._wave_cols(0, 16000 * 4, 200)
+    assert len(env) == 200 and float(env.max()) == 1.0
+    dead = float(env[:50].max())                    # the dead first second
+    loud = float(env[50:100].max())
     assert dead < 0.05 and loud > 0.9
-    assert win._wave_env("/v/missing.mp4") is None
+    zoomed = tl._wave_cols(16000, 32000, 200)       # zoomed slice stays normed to file peak
+    assert float(zoomed.max()) == 1.0
+    tl.set_data(100, 25.0)
+    assert tl.wave is None
 
 
-def test_timeline_accepts_wave(win):
+def test_timeline_zoom_pan(win):
+    tl = win.timeline
+    tl.resize(812, 56)
+    tl.set_data(25000, 25.0)                        # 1000 s
+    tl.zoom_at(3, 406)                              # ~1.95x in, centred mid-strip
+    assert tl.zoom > 1.0
+    span = tl._span()
+    mid_f = tl._f(406)
+    assert abs(tl._x(mid_f) - 406) < 1.0            # anchor stays under the cursor
+    v0 = tl.v0
+    tl.pan_by(100)                                  # grab-drag right: earlier content
+    assert tl.v0 < v0
+    tl.zoom_at(-20, 406)                            # zoom all the way out
+    assert tl.zoom == 1.0 and tl.v0 == 0.0
+
+
+def test_snap_includes_speech_bounds(win):
+    tl = win.timeline
+    tl.set_data(1000, 25.0, snaps=[10.0, 20.0, 9999.0])
+    assert 10.0 in tl.snaps and 20.0 in tl.snaps
+    assert 9999.0 not in tl.snaps                   # out-of-range filtered
+
+
+def test_frame_step_and_io(win, tmp_path):
+    import cv2
     import numpy as np
-    win.timeline.set_data(100, 25.0, wave=np.linspace(0, 1, 400))
-    assert win.timeline.wave is not None and len(win.timeline.wave) == 400
-    win.timeline.set_data(100, 25.0)
-    assert win.timeline.wave is None
+    p = str(tmp_path / "v.mp4")
+    w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*"mp4v"), 10, (160, 90))
+    for _ in range(50):
+        w.write(np.full((90, 160, 3), 128, np.uint8))
+    w.release()
+    win._add_item({"path": p, "label": "v.mp4"})
+    it = win.queue.item(0)
+    win.queue.setCurrentItem(it)
+    win._select(it)
+    assert win.reader is not None
+    win._seek(20)
+    win._step(1)
+    assert win.slider.value() == 21
+    win._step(-21)
+    assert win.slider.value() == 0
+    win._step(10)
+    win._clip_io(True)
+    from PySide6.QtCore import Qt
+    data = it.data(Qt.UserRole)
+    assert data.get("clip") is not None
