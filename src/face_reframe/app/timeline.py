@@ -20,10 +20,13 @@ class Timeline(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(30)
+        self.setFixedHeight(56)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setMouseTracking(True)
         self.n, self.fps = 1, 25.0
+        self.wave = None
+        """Peak envelope 0..1 of the source audio — the dead spots read as
+        flat lines, which is exactly what the eye hunts for when cutting."""
         self.removed: List[Tuple[float, float]] = []
         self.mcuts: List[Tuple[float, float]] = []
         """Hand-cut ranges in seconds — painted orange, kept separate from
@@ -45,12 +48,13 @@ class Timeline(QWidget):
         """Snap targets in seconds (shot cuts, markers, events, clip edges)."""
 
     def set_data(self, n: int, fps: float, removed=None, cuts=(), manual=(), clip=None,
-                 words=False, events=(), mcuts=None):
+                 words=False, events=(), mcuts=None, wave=None):
         self.n, self.fps = max(1, n), fps or 25.0
         self.removed = list(removed or [])
         self.mcuts = list(mcuts or [])
         self.cuts, self.manual, self.clip, self.words = list(cuts), list(manual), clip, words
         self.events = list(events)
+        self.wave = wave
         pts = [c / self.fps for c in self.cuts] + [m / self.fps for m in self.manual] + list(self.events)
         if self.clip is not None:
             pts += [self.clip[0] / self.fps, self.clip[1] / self.fps]
@@ -68,7 +72,24 @@ class Timeline(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         h = self.height()
-        bar = QRectF(6, 9, self.width() - 12, 12)
+        W = self.width() - 12
+        # layout: diamonds 1-7 · wave lane 9-33 · track 36-48 · ticks 34-50 · events ~53
+        wave_rect = QRectF(6, 9, W, 24)
+        wpath = QPainterPath()
+        wpath.addRoundedRect(wave_rect, 5, 5)
+        p.fillPath(wpath, QColor("#141416"))
+        if self.wave is not None and len(self.wave):
+            p.save()
+            p.setClipPath(wpath)
+            p.setPen(QPen(QColor("#7c7c92"), 1))
+            mid = 21.0
+            nw = len(self.wave)
+            for px in range(int(W)):
+                v = min(1.0, float(self.wave[int(px * nw / W)])) * 11.0
+                x = 6.0 + px
+                p.drawLine(QPointF(x, mid - v), QPointF(x, mid + max(v, 0.5)))
+            p.restore()
+        bar = QRectF(6, 36, W, 12)
         track = QPainterPath()
         track.addRoundedRect(bar, 6, 6)
         p.fillPath(track, QColor("#1e1e1e"))
@@ -76,32 +97,32 @@ class Timeline(QWidget):
         p.setClipPath(track)
         if self.clip is not None:
             a, b = self.clip
-            p.fillRect(QRectF(self._x(a), 9, self._x(b) - self._x(a), 12), QColor("#323232"))
+            p.fillRect(QRectF(self._x(a), 36, self._x(b) - self._x(a), 12), QColor("#323232"))
         for a, b in self.removed:
             x0, x1 = self._x(a * self.fps), self._x(b * self.fps)
-            p.fillRect(QRectF(x0, 9, max(1.0, x1 - x0), 12), QColor(229, 72, 77, 170))
+            p.fillRect(QRectF(x0, 36, max(1.0, x1 - x0), 12), QColor(229, 72, 77, 170))
         for a, b in self.mcuts:
             x0, x1 = self._x(a * self.fps), self._x(b * self.fps)
-            p.fillRect(QRectF(x0, 9, max(1.0, x1 - x0), 12), QColor(229, 160, 10, 200))
+            p.fillRect(QRectF(x0, 36, max(1.0, x1 - x0), 12), QColor(229, 160, 10, 200))
         if self.sel is not None:
             x0, x1 = self._x(self.sel[0] * self.fps), self._x(self.sel[1] * self.fps)
-            p.fillRect(QRectF(x0, 9, max(1.0, x1 - x0), 12), QColor(90, 200, 250, 90))
+            p.fillRect(QRectF(x0, 36, max(1.0, x1 - x0), 12), QColor(90, 200, 250, 90))
             p.setPen(QPen(QColor("#5ac8fa"), 1))
-            p.drawRect(QRectF(x0, 9, max(1.0, x1 - x0), 12))
+            p.drawRect(QRectF(x0, 36, max(1.0, x1 - x0), 12))
         p.restore()
         p.setPen(QPen(QColor("#8d8d8d"), 1))
         for c in self.cuts:
             x = self._x(c)
-            p.drawLine(QPointF(x, 6), QPointF(x, 24))
+            p.drawLine(QPointF(x, 34), QPointF(x, 50))
         p.setPen(Qt.NoPen)
         p.setBrush(QColor("#f5c542"))
         for m in self.manual:
             x = self._x(m)
-            p.drawPolygon(QPolygonF([QPointF(x, 1), QPointF(x + 4, 5), QPointF(x, 9), QPointF(x - 4, 5)]))
+            p.drawPolygon(QPolygonF([QPointF(x, 1), QPointF(x + 3, 4), QPointF(x, 7), QPointF(x - 3, 4)]))
         p.setBrush(QColor("#5ac8fa"))
         for t in self.events:
             x = self._x(t * self.fps)
-            p.drawEllipse(QPointF(x, 25), 2.4, 2.4)
+            p.drawEllipse(QPointF(x, 52.5), 2.4, 2.4)
         if self.blade is not None:
             x = self._x(self.blade * self.fps)
             pen = QPen(QColor("#e5a00a"), 2)

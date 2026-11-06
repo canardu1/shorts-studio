@@ -190,3 +190,28 @@ def test_cli_render_list(capsys):
     assert main(["render", "--list"]) == 0
     out = capsys.readouterr().out
     assert "Vlog" in out and "TikTok" in out
+
+
+# ------------------------------------------------------------- timeline wave
+def test_wave_envelope(win):
+    import numpy as np
+    pcm = np.zeros(16000 * 4, dtype=np.float32)
+    pcm[16000:16000 * 2] = 0.8                      # loud second
+    pcm[16000 * 3:16000 * 3 + 400] = 0.5            # short blip
+    win.pcm["/v/a.mp4"] = pcm
+    env = win._wave_env("/v/a.mp4")
+    assert env is not None and len(env) <= 1600
+    assert float(env.max()) == 1.0                  # normalised to peak
+    # the dead first second must read near zero in the envelope
+    dead = float(env[: len(env) // 4].max())
+    loud = float(env[len(env) // 4: len(env) // 2].max())
+    assert dead < 0.05 and loud > 0.9
+    assert win._wave_env("/v/missing.mp4") is None
+
+
+def test_timeline_accepts_wave(win):
+    import numpy as np
+    win.timeline.set_data(100, 25.0, wave=np.linspace(0, 1, 400))
+    assert win.timeline.wave is not None and len(win.timeline.wave) == 400
+    win.timeline.set_data(100, 25.0)
+    assert win.timeline.wave is None

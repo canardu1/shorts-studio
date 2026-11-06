@@ -322,6 +322,7 @@ class MainWindow(QMainWindow):
         self._people = []
         self._people_for = None
         self.pcm = {}                            # abs path -> 16 kHz audio (current file only)
+        self._wave_cache = {}                    # abs path -> timeline peak envelope
         self.removed = []                        # preview: cut ranges (s), source timeline
         self._blade = None                       # pending blade mark (s) for B-key cuts
         self._split = None
@@ -2193,6 +2194,7 @@ class MainWindow(QMainWindow):
                 self.proxy.close()
                 self.proxy = None
             self.pcm = {}
+            self._wave_cache = {}
             self._feat_cache = {}
             self.removed = []
             self._blade = None
@@ -2537,8 +2539,28 @@ class MainWindow(QMainWindow):
                   if vsegs[i][2] != vsegs[i - 1][2] and vsegs[i][2] >= 0]
         self.timeline.set_data(self.reader.count, fps, self.removed, cuts, [m[0] for m in man],
                                self.clip_range, bool(words), events=events,
-                               mcuts=self.manual_cuts.get(key) or [])
+                               mcuts=self.manual_cuts.get(key) or [],
+                               wave=self._wave_env(key))
         self._show_frame(self.slider.value())
+
+    def _wave_env(self, key):
+        """Peak envelope of the cached 16 kHz PCM for the timeline lane —
+        computed once per file (it is just a chunked abs-max)."""
+        pcm = self.pcm.get(key)
+        if pcm is None:
+            return None
+        env = self._wave_cache.get(key)
+        if env is None:
+            a = np.abs(np.asarray(pcm, dtype=np.float32))
+            cols = 1600
+            if len(a) <= cols:
+                env = a
+            else:
+                n = len(a) // cols * cols
+                env = a[:n].reshape(-1, len(a) // cols).max(1)
+            m = float(env.max()) if len(env) else 0.0
+            self._wave_cache[key] = env / m if m > 0 else env
+        return self._wave_cache[key]
 
     def _preview_size(self):
         ow, oh = output_size(self._val("aspect"), 1920)
