@@ -188,7 +188,7 @@ class FaceRestorer:
         d0, d1 = abs(lm[0][0] - n[0]), abs(lm[1][0] - n[0])
         return min(d0, d1) >= 0.28 * max(d0, d1)
 
-    def __call__(self, frame: np.ndarray) -> np.ndarray:
+    def __call__(self, frame: np.ndarray, full: bool = False) -> np.ndarray:
         import cv2
         faces = [f for f in self.detector.detect(frame)
                  if f.landmarks is not None and f.h >= self.min_face]
@@ -215,9 +215,12 @@ class FaceRestorer:
             # size + yaw are what stop it from inventing features
             ok = self._gate(lm, W)
             # fade the restoration in/out instead of switching — a face that
-            # appears for a moment (or turns away) shouldn't pop
+            # appears for a moment (or turns away) shouldn't pop.  ``full``
+            # (single-frame preview) skips the ramp: show the real strength.
             w = (prev["w"] if prev is not None else 0.0) + (0.14 if ok else -0.18)
             w = min(self.blend, max(0.0, w))
+            if full:
+                w = self.blend if ok else 0.0
             cur.append({"lm": lm, "w": w})
             if w < 0.04:
                 continue                    # faded out: skip the network run

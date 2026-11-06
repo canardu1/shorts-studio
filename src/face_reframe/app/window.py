@@ -2835,7 +2835,7 @@ class MainWindow(QMainWindow):
             from .jobs import make_restorer
             r = cached or make_restorer(s, lambda *_: None, progress)
             r._prev = []  # preview frames aren't consecutive: no landmark smoothing
-            img = r(out)
+            img = r(out, full=True)   # still frame: show the real blend, not the fade-in
             if s.beauty is not None and s.beauty.active:
                 from ..beauty import Beautifier, FaceParser, parse_available
                 b = Beautifier(s.beauty, parser=FaceParser() if parse_available() else None)
