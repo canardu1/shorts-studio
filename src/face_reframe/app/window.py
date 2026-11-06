@@ -2600,12 +2600,19 @@ class MainWindow(QMainWindow):
 
     def _timeline_thumb(self, f: int):
         """Small hover thumbnail for the timeline — cached so scrubbing back
-        and forth over the same stretch doesn't re-seek the reader."""
+        and forth over the same stretch doesn't re-seek the reader. Prefers
+        the low-res proxy when it exists; schedules a one-frame-ahead
+        prefetch in the hover direction so the next thumb is usually warm."""
         if not self.reader:
             return None
+        prev = getattr(self, "_thumb_prev", None)
+        self._thumb_prev = f
+        if prev is not None and f != prev:
+            self._thumb_dir = 1 if f > prev else -1
         img = self._thumb_cache.get(f)
         if img is None:
-            fr = self.reader.read(f)
+            rd = self.proxy or self.reader          # proxy reads are cheap
+            fr = rd.read(f)
             if fr is None:
                 return None
             from .preview import to_qimage
@@ -2613,7 +2620,24 @@ class MainWindow(QMainWindow):
             self._thumb_cache[f] = img
             if len(self._thumb_cache) > 64:
                 self._thumb_cache.pop(next(iter(self._thumb_cache)))
+        nxt = f + getattr(self, "_thumb_dir", 1) * max(1, int(self.reader.fps))
+        if 0 <= nxt < self.reader.count and nxt not in self._thumb_cache:
+            QTimer.singleShot(0, lambda: self._prefetch_thumb(nxt))
         return img
+
+    def _prefetch_thumb(self, f: int):
+        """One neighbour frame, off the hover path — keeps the tooltip one
+        step ahead without batching reads into a UI stall."""
+        if not self.reader or f in self._thumb_cache:
+            return
+        rd = self.proxy or self.reader
+        fr = rd.read(f)
+        if fr is None:
+            return
+        from .preview import to_qimage
+        self._thumb_cache[f] = to_qimage(fr).scaledToWidth(160, Qt.SmoothTransformation)
+        if len(self._thumb_cache) > 64:
+            self._thumb_cache.pop(next(iter(self._thumb_cache)))
 
     def _preview_size(self):
         ow, oh = output_size(self._val("aspect"), 1920)
@@ -2952,6 +2976,9 @@ class MainWindow(QMainWindow):
 
     def _clip_io(self, is_start: bool):
         """I/O at the playhead: same trim as the edit menu's clip start/end."""
+        if self._cur_item() is None:
+            self._log(tr("Select a video in the list first."))
+            return
         if self.reader:
             self._clip_edge(is_start, self.slider.value() / self.reader.fps)
 
@@ -4321,6 +4348,9 @@ class MainWindow(QMainWindow):
 
     def _blade_mode_set(self, on: bool):
         self.timeline.set_blade_mode(on)
+        if self.batch is None:
+            self.stage_lab.setText(tr("Blade armed — click to mark, again to cut (Esc exits)")
+                                   if on else tr("Ready"))
         if on:
             self._log(tr("Blade armed — click the timeline to mark, again to cut"))
 
@@ -4392,7 +4422,10 @@ class MainWindow(QMainWindow):
 
     def _clip_edge(self, is_start: bool, t: float):
         it, data = self.queue.currentItem(), self._cur_item()
-        if it is None or data is None or not self.reader:
+        if it is None or data is None:
+            self._log(tr("Select a video in the list first."))
+            return
+        if not self.reader:
             return
         dur = self.reader.count / self.reader.fps
         a, b = data.get("clip") or (0.0, dur)
@@ -4600,6 +4633,7 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.stage_lab.setText(tr("Done"))
         self.batch = None
+        self._render_t0 = {}
         self._update_count()
         QTimer.singleShot(600, self._watch_maybe_render)
         self._refresh_cache_label()

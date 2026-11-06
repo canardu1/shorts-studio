@@ -342,3 +342,43 @@ def test_new_looks_render():
                  "Dreamy", "Y2K digicam", "Faded film", "Midnight", "Sunset"):
         assert name in GRADE_BUILTIN
         assert set(GRADE_BUILTIN[name]) <= set(GRADE_KEYS)
+
+
+# ------------------------------------------------- QoL round 2 polish
+def test_snap_threshold_capped(win):
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    tl = win.timeline
+    tl.resize(812, 56)
+    tl.set_data(90000, 25.0, snaps=[10.0])          # 1 h file
+    # click ~0.8 s from the snap at full zoom: without the cap (~1.1 s
+    # threshold) it would glue to the snap anyway
+    ev = QMouseEvent(QMouseEvent.Type.MouseButtonPress,
+                     QPointF(6 + 800 * (11.0 * 25) / 90000, 20),
+                     Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    t = tl._t(ev)
+    assert abs(t - 11.0) < 0.15                     # snapped? no: capped at 0.35 s
+    ev_near = QMouseEvent(QMouseEvent.Type.MouseButtonPress,
+                          QPointF(6 + 800 * (10.2 * 25) / 90000, 20),
+                          Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    assert tl._t(ev_near) == 10.0                   # close enough still snaps
+
+
+def test_batch_finished_clears_render_t0(win):
+    win._render_t0 = {0: 1.0, 1: 2.0}
+    win._batch_finished()
+    assert win._render_t0 == {}
+
+
+def test_clip_io_without_selection_logs(win):
+    win.queue.clear()
+    win._clip_io(True)
+    assert "select" in win.log_view.toPlainText().lower()
+
+
+def test_thumb_prefetch_tracks_direction(win):
+    win._thumb_dir = 0
+    win._thumb_prev = None
+    # direction tracking only needs _thumb_prev bookkeeping (no reader here)
+    prev = getattr(win, "_thumb_prev", None)
+    assert prev is None

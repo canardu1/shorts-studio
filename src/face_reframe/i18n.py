@@ -522,6 +522,9 @@ _IT = {
     "Restore under selection (⌫)": "Ripristina nella selezione (⌫)",
     "Set clip start at playhead (I)": "Imposta inizio clip al playhead (I)",
     "Set clip end at playhead (O)": "Imposta fine clip al playhead (O)",
+    "Select a video in the list first.": "Seleziona prima un video nella lista.",
+    "Blade armed — click to mark, again to cut (Esc exits)":
+        "Lama attiva — clicca per marcare, di nuovo per tagliare (Esc esce)",
     "invalid project file": "file di progetto non valido",
     "Select a video.": "Seleziona un video.",
     "You need a transcript first: press “Transcribe”.":

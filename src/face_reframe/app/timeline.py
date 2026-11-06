@@ -258,6 +258,17 @@ class Timeline(QWidget):
             p.setFont(f)
             p.drawText(wave_rect.adjusted(0, 0, -6, -3),
                        Qt.AlignRight | Qt.AlignBottom, "%.1f×" % self.zoom)
+        if self.blade_mode:
+            f = QFont(p.font())
+            f.setPointSizeF(7.5)
+            f.setBold(True)
+            p.setFont(f)
+            badge = QRectF(10, 12, 46, 15)
+            path = QPainterPath()
+            path.addRoundedRect(badge, 3, 3)
+            p.fillPath(path, QColor(229, 160, 10, 55))
+            p.setPen(QPen(QColor("#e5a00a"), 1))
+            p.drawText(badge, Qt.AlignCenter, "BLADE")
         bar = QRectF(6, 36, W, 12)
         track = QPainterPath()
         track.addRoundedRect(bar, 6, 6)
@@ -309,7 +320,9 @@ class Timeline(QWidget):
         f = self._f(ev.position().x())
         t = max(0.0, min(self.n - 1, f)) / self.fps
         if self.snaps_on and self.snaps:
-            thr = 6.0 * self._span() / max(1.0, self.width() - 12) / self.fps   # ~6 px
+            # ~6 px of timeline — tight when zoomed in; capped so a zoomed-out
+            # hour doesn't feel like the pointer is glued to every pause
+            thr = min(6.0 * self._span() / max(1.0, self.width() - 12) / self.fps, 0.35)
             near = min(self.snaps, key=lambda s: abs(s - t))
             if abs(near - t) <= thr:
                 t = near
