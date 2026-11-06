@@ -373,7 +373,7 @@ class Timeline(QWidget):
         if self._thumb_tip is None:
             self._thumb_tip = _ThumbTip()
         f, fps = self._thumb_f, self.fps
-        tc = "%d:%02d.%02d" % (f / fps / 60, f / fps % 60, f % int(round(fps)))
+        tc = "%d:%02d.%02d" % (f / fps / 60, f / fps % 60, f % max(1, int(round(fps))))
         self._thumb_tip.show_for(img, tc, self._thumb_pos)
 
     def _hide_thumb(self):

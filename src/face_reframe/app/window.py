@@ -4004,7 +4004,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------ recent projects
     def _recent_projects(self) -> list:
         try:
-            return json.loads(self._settings().value("recentProjects", "[]") or "[]")
+            return [p for p in json.loads(
+                self._settings().value("recentProjects", "[]") or "[]")
+                if isinstance(p, str)]
         except (ValueError, TypeError):
             return []
 
@@ -4016,6 +4018,8 @@ class MainWindow(QMainWindow):
     def _rebuild_recent(self):
         rm = self._recent_menu
         rm.clear()
+        # display-filter only: a path that doesn't exist *right now* might be an
+        # unmounted external drive — keep it in storage, hide it in the menu
         rec = [p for p in self._recent_projects() if os.path.exists(p)]
         rm.setEnabled(bool(rec))
         for p in rec:
@@ -4538,9 +4542,8 @@ class MainWindow(QMainWindow):
         it = items[i]
         try:
             from .jobs import media_info
-            dur = it.get("dur") or (
-                it["clip"][1] - it["clip"][0] if it.get("clip")
-                else media_info(it["path"])[0])
+            dur = (it["clip"][1] - it["clip"][0]) if it.get("clip") \
+                else (it.get("dur") or media_info(it["path"])[0])
         except Exception:
             return
         if dur <= 0:
@@ -4557,8 +4560,10 @@ class MainWindow(QMainWindow):
         s = self._render_samples()
         if not s:
             return None
-        same = [r["t"] / r["s"] for r in s if bool(r.get("x")) == heavy and r.get("s")]
-        ratios = same if len(same) >= 2 else [r["t"] / r["s"] for r in s if r.get("s")]
+        def ok(r):
+            return isinstance(r, dict) and r.get("s") and r.get("t")
+        same = [r["t"] / r["s"] for r in s if ok(r) and bool(r.get("x")) == heavy]
+        ratios = same if len(same) >= 2 else [r["t"] / r["s"] for r in s if ok(r)]
         if not ratios:
             return None
         ratios.sort()
@@ -4575,18 +4580,16 @@ class MainWindow(QMainWindow):
             if qit.isHidden():
                 continue
             d = qit.data(Qt.UserRole) or {}
-            dur = d.get("dur")
-            if dur is None:
-                dur = (d["clip"][1] - d["clip"][0]) if d.get("clip") else None
+            # clip span beats a stale cached file duration
+            dur = (d["clip"][1] - d["clip"][0]) if d.get("clip") else d.get("dur")
             if dur is None and probed < 6:          # cap the upfront probing cost
+                probed += 1
                 try:
                     dur = media_info(d["path"])[0]
                 except Exception:
-                    dur = None
-                probed += 1
-                if dur:
-                    d["dur"] = dur
-                    qit.setData(Qt.UserRole, d)
+                    dur = 0.0
+                d["dur"] = dur or 0.0               # cache failures too: no reprobing
+                qit.setData(Qt.UserRole, d)
             total += dur or 0.0
         if total <= 0:
             return None
