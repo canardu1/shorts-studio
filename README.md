@@ -33,6 +33,21 @@ Automatic 16:9 → 9:16 reframe · word-by-word captions + punch-in · manual ti
 <i>Demo clips generated from your own footage — see <a href="docs/media/README.md">docs/media</a></i>
 </sub></p>
 
+## New in 0.8.0 — hands-off
+
+- **Watch folder** — drop a video into a watched folder and it's queued automatically; tick **Auto-render** and it renders with your current settings, hands-off
+- **Smarter best moments** — speaker-labelled clips (👤, rename to *Marco* with the ✎ and it sticks in the project), semantic **near-duplicate skipping**, **seamless-loop** end snapping, and **chapters export** for YouTube/CSV
+- **CLI v2** — `face_reframe render` runs the whole pipeline headless: presets, templates, `--moments N`, any option via `--set`
+- **CoreML on Apple Silicon** — vision models run up to ~2.6× faster (CPU fallback always available, `SHORTS_CPU_ONLY=1` to force)
+- **Template system everywhere** — 14 content presets × 4 camera styles × 6 voice chains × 7 colour grades × 8 caption styles × 5 platform exports, plus your own ★ templates
+- **In-app update check**, undo on *Remove*, mono timecode font, spectrum settings rail
+
+<p align="center">
+  <img src="docs/media/moments.png" width="49%" alt="Speaker-labelled moments, dedupe and loop options, watch folder">
+  <img src="docs/media/templates.png" width="49%" alt="Spectrum settings rail and camera templates">
+</p>
+<p align="center"><sub>Speaker-labelled, deduped, loop-snapped moments · spectrum rail + per-tab templates</sub></p>
+
 ## A free, offline alternative to OpusClip & CapCut
 
 Tools like OpusClip, Submagic or CapCut Pro do this in the cloud for **$15–30 a month**. Shorts Studio runs **locally** — your footage never leaves the machine, it works **offline** after the first model download, and it processes a whole folder in **batch** while you do something else.
@@ -83,6 +98,10 @@ No installer, no account, no admin password. Each AI feature downloads its model
 ### ✂️ Editing
 - **Cut pauses** (Silero VAD or level/dB), **cut breaths**, **cut fillers**, **cut retakes** — last take wins
 - **Best moments finder** — strongest 30–60 s clips, boosted by **YAMNet** laughter/applause/music detection; tick *"Check clips are complete thoughts"* and optional **MiniLM** sentence embeddings (multilingual, ~135 MB once) penalise clips that start mid-discussion or switch topic halfway
+- **Speaker-labelled moments** — **ECAPA voice ID** tags each suggested clip with who's talking; filter to one voice, rename speakers (persists in the project)
+- **Near-duplicate skipping** — the same story told twice keeps only the stronger take (MiniLM semantic match, or word overlap without it)
+- **Seamless-loop ends** — each clip's end snaps to the frame that best matches its opening, so the short replays invisibly
+- **Chapters export** — the moments become YouTube description chapters or CSV markers on the *source* timeline
 - **Manual timeline editing** — drag a range, **X** to cut (amber, on top of the automatic cuts), right-click to restore; **B** marks a blade point, second **B** cuts between marks; selection **snaps** to shot cuts, markers and events; trim clip edges or cut to end from the same menu; everything undoable
 - **Clip ranges** + **batch** a whole folder
 
@@ -90,7 +109,7 @@ No installer, no account, no admin password. Each AI feature downloads its model
 - Local **Whisper transcription**, cached per file
 - **TikTok-style word-by-word** captions or classic lines — colour, position, uppercase
 - **Full styling** — any installed font, size, text/highlight colours, optional pill box, motion (fade, slide-up, pop-on-word)
-- **Style templates** — one-click caption looks (Default, Hormozi, Minimal, Cinematic) plus your own saved styles
+- **Style templates** — 8 one-click caption looks (Default, Hormozi, Karaoke neon, Podcast bold, Emoji burst, Broadcast…) plus your own saved styles
 - **Auto-emoji** on keywords 🔥💰🤫 and **karaoke sweep** highlight — the OpusClip caption look, fully local
 - **Virality score** — every suggested clip gets a 🔥 score (hook, speech density, laughter, clean ending)
 - **Subtitle editor** — fix words, find & replace, timings re-spread automatically
@@ -130,10 +149,13 @@ No installer, no account, no admin password. Each AI feature downloads its model
 - **Title, description and hashtags** drafted from the transcript
 
 ### 🧰 Workflow
+- **Watch folder** — new videos in a chosen folder queue themselves; **Auto-render** makes it fully hands-off
 - Live side-by-side preview · safe-zone overlay for TikTok/Reels/Shorts
-- **Undo/redo**, **projects** with autosave, **presets** — content-type recipes (Interview, Gaming, ASMR, Archive restore…) plus saveable **templates** for voice chains, colour grades, caption styles and per-platform export
+- **Undo/redo** — timeline edits, hook text and queue removals all undoable · **projects** with autosave
+- **Presets & templates** — content-type recipes (Interview, Gaming, ASMR, Archive restore…) plus saveable templates for camera styles, voice chains, colour grades, caption styles and per-platform export
+- **In-app update check** against GitHub releases (opt-out, silent when offline)
 - Native **macOS menu bar** (File/Edit/Tools/Playback/View) with standard ⌘ shortcuts
-- Disk cache, proxies for 4K HEVC, VideoToolbox encoding
+- Disk cache, proxies for 4K HEVC, VideoToolbox encoding, **CoreML acceleration** on Apple Silicon (`SHORTS_CPU_ONLY=1` to force CPU)
 - **Interlaced & VFR sources** — old TV/DV clips and wonky phone captures are normalised once on ingest (bwdif deinterlace + CFR), so the reframe never combs and audio never drifts
 - Long renders keep the Mac awake until done
 
@@ -190,6 +212,13 @@ Restart Resolve → **Workspace › Scripts**. Details: [docs/resolve-tools.md](
 ### Command line
 
 ```bash
+# full pipeline, headless — same presets/templates/moments as the app
+face_reframe render podcast.mp4 --preset "2-person podcast" \
+    --style "camera:Tight podcast" --style "voice:Podcast voice" \
+    --set subtitles=burn --moments 5 -o shorts/
+face_reframe render --list            # every preset and template name
+
+# classic reframe-only tools
 face-reframe interview.mp4 -o short.mp4 --subject speaker
 python -m face_reframe.cut in.mp4 -o out.mp4
 python -m face_reframe.cinematic in.mp4 -o out.mp4
@@ -205,6 +234,7 @@ Measured on an Apple M1, 1080p source:
 | Beauty, skin fix, looks, camera moves | a few ms per frame |
 | Thumbnails (4 variants) | ~1.5 s |
 | Encoding (VideoToolbox vs x264 medium) | ~2× faster |
+| Matting via **CoreML EP** (M-series) vs CPU | ~2.6× faster |
 
 A "PC lento" preset keeps everything usable on older machines.
 
