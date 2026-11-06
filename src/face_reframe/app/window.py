@@ -708,21 +708,21 @@ class MainWindow(QMainWindow):
         self.timeline.blade_at.connect(self._blade_at)
 
         tbar = QHBoxLayout()
-        tbar.setSpacing(3)
+        tbar.setSpacing(4)
         tbar.addStretch(1)
 
         def tsep():
             f = QFrame()
-            f.setFixedSize(1, 12)
+            f.setFixedSize(1, 16)
             f.setStyleSheet("background: #2c2c36;")
-            tbar.addSpacing(4)
+            tbar.addSpacing(5)
             tbar.addWidget(f)
-            tbar.addSpacing(4)
+            tbar.addSpacing(5)
 
         def tl_btn(icon, tip, fn, checkable=False, accent=None):
             b = QToolButton()
-            b.setIconSize(QSize(15, 15))
-            b.setFixedSize(27, 22)
+            b.setIconSize(QSize(19, 19))
+            b.setFixedSize(34, 28)
             b.setToolTip(tr(tip))
             b.setIcon(_rail_icon(icon, accent) if accent else _icon(icon))
             b.setCheckable(checkable)
