@@ -500,6 +500,9 @@ _IT = {
     "Open project": "Apri progetto",
     "Can't open the project: %s": "Impossibile aprire il progetto: %s",
     "Project opened: %s": "Progetto aperto: %s",
+    "Open recent": "Apri recenti",
+    "Clear": "Svuota",
+    "  · ~%s": "  · ~%s",
     "invalid project file": "file di progetto non valido",
     "Select a video.": "Seleziona un video.",
     "You need a transcript first: press “Transcribe”.":

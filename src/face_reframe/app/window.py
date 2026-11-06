@@ -468,6 +468,8 @@ class MainWindow(QMainWindow):
         m = mb.addMenu(tr("File"))
         self._act(m, "Open project…", self._open_project, QKeySequence.Open)
         self._act(m, "Save project…", self._save_project, QKeySequence.Save)
+        self._recent_menu = m.addMenu(tr("Open recent"))
+        self._rebuild_recent()
         m.addSeparator()
         self._act(m, "Add videos…", self._add_dialog, "Ctrl+Shift+O")
         self._act(m, "Add folder…", self._add_folder)
@@ -2086,7 +2088,11 @@ class MainWindow(QMainWindow):
     def _update_count(self):
         n = sum(1 for i in range(self.queue.count()) if not self.queue.item(i).isHidden())
         self.drop_hint.setVisible(n == 0)
-        self.start_btn.setText(tr("Create short") if n <= 1 else tr("Create %d shorts") % n)
+        label = tr("Create short") if n <= 1 else tr("Create %d shorts") % n
+        est = self._render_estimate()
+        if est and n:
+            label += tr("  · ~%s") % est
+        self.start_btn.setText(label)
 
     def _remove_selected(self):
         sel = sorted((self.queue.row(it) for it in self.queue.selectedItems()),
@@ -3934,6 +3940,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, APP_NAME, tr("Saving failed: %s") % exc)
             return
         self._project_path = path
+        self._push_recent(path)
         self._log(tr("Project saved: %s") % path)
 
     def _open_project(self):
@@ -3947,7 +3954,50 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, APP_NAME, tr("Can't open the project: %s") % exc)
             return
         self._project_path = path
+        self._push_recent(path)
         self._log(tr("Project opened: %s") % path)
+
+    # ------------------------------------------------------ recent projects
+    def _recent_projects(self) -> list:
+        try:
+            return json.loads(self._settings().value("recentProjects", "[]") or "[]")
+        except (ValueError, TypeError):
+            return []
+
+    def _push_recent(self, path: str):
+        rec = [path] + [p for p in self._recent_projects() if p != path]
+        self._settings().setValue("recentProjects", json.dumps(rec[:8]))
+        self._rebuild_recent()
+
+    def _rebuild_recent(self):
+        rm = self._recent_menu
+        rm.clear()
+        rec = [p for p in self._recent_projects() if os.path.exists(p)]
+        rm.setEnabled(bool(rec))
+        for p in rec:
+            a = rm.addAction(os.path.basename(p))
+            a.setToolTip(p)
+            a.triggered.connect(lambda _c, path=p: self._open_recent(path))
+        if rec:
+            rm.addSeparator()
+            rm.addAction(tr("Clear")).triggered.connect(self._clear_recent)
+
+    def _open_recent(self, path: str):
+        try:
+            self.load_project(path)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, APP_NAME, tr("Can't open the project: %s") % exc)
+            rec = [p for p in self._recent_projects() if p != path]
+            self._settings().setValue("recentProjects", json.dumps(rec))
+            self._rebuild_recent()
+            return
+        self._project_path = path
+        self._push_recent(path)
+        self._log(tr("Project opened: %s") % path)
+
+    def _clear_recent(self):
+        self._settings().setValue("recentProjects", "[]")
+        self._rebuild_recent()
 
     @staticmethod
     def autosave_path() -> str:
@@ -4362,6 +4412,8 @@ class MainWindow(QMainWindow):
         th.finished.connect(self._batch_finished)
         self.batch = worker
         self._batch_thread = th
+        self._batch_items = items
+        self._render_t0 = {}
         self._total = len(items)
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
@@ -4389,6 +4441,7 @@ class MainWindow(QMainWindow):
         return QMessageBox.question(self, APP_NAME, msg) == QMessageBox.Yes
 
     def _on_file_started(self, i):
+        self._render_t0[i] = time.monotonic()
         self._set_status(i, "◐")
 
     def _on_progress(self, i, stage, f):
@@ -4409,16 +4462,87 @@ class MainWindow(QMainWindow):
                 data["failed"] = True
             it.setData(Qt.UserRole, data)
         if ok:
+            self._record_render_time(i)
             for out in res:
                 self._log(tr("✓ Created: %s") % out)
         else:
             self._log(tr("✕ Error: %s") % res)
+
+    # ------------------------------------------------------- render estimate
+    def _render_samples(self) -> list:
+        try:
+            return json.loads(self._settings().value("renderTimes", "[]") or "[]")
+        except (ValueError, TypeError):
+            return []
+
+    def _record_render_time(self, i):
+        t0 = getattr(self, "_render_t0", {}).pop(i, None)
+        items = getattr(self, "_batch_items", None)
+        if t0 is None or not items or i >= len(items):
+            return
+        it = items[i]
+        try:
+            from .jobs import media_info
+            dur = it.get("dur") or (
+                it["clip"][1] - it["clip"][0] if it.get("clip")
+                else media_info(it["path"])[0])
+        except Exception:
+            return
+        if dur <= 0:
+            return
+        elapsed = time.monotonic() - t0
+        samples = self._render_samples() + [
+            {"s": round(dur, 1), "t": round(elapsed, 1),
+             "x": 1 if self._val("restore") != "off" else 0}]
+        self._settings().setValue("renderTimes", json.dumps(samples[-12:]))
+
+    def _render_ratio(self, heavy: bool):
+        """Median render-seconds per source-second; samples recorded with the
+        same enhancement bucket win when we have enough of them."""
+        s = self._render_samples()
+        if not s:
+            return None
+        same = [r["t"] / r["s"] for r in s if bool(r.get("x")) == heavy and r.get("s")]
+        ratios = same if len(same) >= 2 else [r["t"] / r["s"] for r in s if r.get("s")]
+        if not ratios:
+            return None
+        ratios.sort()
+        return ratios[len(ratios) // 2]
+
+    def _render_estimate(self):
+        ratio = self._render_ratio(self._val("restore") != "off")
+        if ratio is None:
+            return None
+        from .jobs import _dur, media_info
+        total, probed = 0.0, 0
+        for i in range(self.queue.count()):
+            qit = self.queue.item(i)
+            if qit.isHidden():
+                continue
+            d = qit.data(Qt.UserRole) or {}
+            dur = d.get("dur")
+            if dur is None:
+                dur = (d["clip"][1] - d["clip"][0]) if d.get("clip") else None
+            if dur is None and probed < 6:          # cap the upfront probing cost
+                try:
+                    dur = media_info(d["path"])[0]
+                except Exception:
+                    dur = None
+                probed += 1
+                if dur:
+                    d["dur"] = dur
+                    qit.setData(Qt.UserRole, d)
+            total += dur or 0.0
+        if total <= 0:
+            return None
+        return _dur(total * ratio)
 
     def _batch_finished(self):
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.stage_lab.setText(tr("Done"))
         self.batch = None
+        self._update_count()
         QTimer.singleShot(600, self._watch_maybe_render)
         self._refresh_cache_label()
 

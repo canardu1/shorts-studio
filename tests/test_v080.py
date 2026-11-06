@@ -258,3 +258,34 @@ def test_frame_step_and_io(win, tmp_path):
     from PySide6.QtCore import Qt
     data = it.data(Qt.UserRole)
     assert data.get("clip") is not None
+
+
+# --------------------------------------------------- QoL: recents + estimate
+def test_recent_projects(win, tmp_path):
+    p = str(tmp_path / "proj.shorts")
+    win.save_project(p)
+    win._push_recent(p)
+    rec = win._recent_projects()
+    assert rec and rec[0] == p
+    win._push_recent("/other/x.shorts")
+    assert win._recent_projects()[0] == "/other/x.shorts"
+    acts = win._recent_menu.actions()
+    assert "proj.shorts" in [a.text() for a in acts]
+    win._clear_recent()
+    assert win._recent_projects() == []
+    assert not win._recent_menu.isEnabled()
+
+
+def test_render_estimate_label(win, tmp_path):
+    import json
+    win._settings().setValue("renderTimes", json.dumps(
+        [{"s": 60.0, "t": 30.0, "x": 0}] * 3))     # 0.5 s render per s source
+    assert abs(win._render_ratio(False) - 0.5) < 1e-6
+    vid = tmp_path / "v.mp4"
+    vid.write_bytes(b"\x00" * 4096)
+    win._add_item({"path": str(vid), "label": "v.mp4", "dur": 120.0})
+    win._update_count()
+    assert "· ~" in win.start_btn.text()
+    win._settings().setValue("renderTimes", "[]")
+    win._update_count()
+    assert "· ~" not in win.start_btn.text()

@@ -153,7 +153,8 @@ No installer, no account, no admin password. Each AI feature downloads its model
 ### 🧰 Workflow
 - **Watch folder** — new videos in a chosen folder queue themselves; **Auto-render** makes it fully hands-off
 - Live side-by-side preview · safe-zone overlay for TikTok/Reels/Shorts
-- **Undo/redo** — timeline edits, hook text and queue removals all undoable · **projects** with autosave
+- **Undo/redo** — timeline edits, hook text and queue removals all undoable · **projects** with autosave and an *Open recent* menu
+- **Render estimate** — the render button shows a learned estimate (`Create 3 shorts · ~4 min`) from your own past renders, bucketed by enhancement on/off
 - **Presets & templates** — content-type recipes (Interview, Gaming, ASMR, Archive restore…) plus saveable templates for camera styles, voice chains, colour grades, caption styles and per-platform export
 - **In-app update check** against GitHub releases (opt-out, silent when offline)
 - Native **macOS menu bar** (File/Edit/Tools/Playback/View) with standard ⌘ shortcuts
