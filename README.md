@@ -33,7 +33,20 @@ Automatic 16:9 → 9:16 reframe · word-by-word captions + punch-in · manual ti
 <i>Demo clips generated from your own footage — see <a href="docs/media/README.md">docs/media</a></i>
 </sub></p>
 
-## New in 0.8.0 — hands-off
+## New in 0.8.x — hands-off & a real timeline
+
+**0.8.5 — Timeline 2.0**
+
+- **Audio waveform lane** above the cut bar — dead air reads as flat stretches you can spot and cut at a glance
+- **Zoom & pan** — scroll to zoom into the exact cut (cursor-anchored), two-finger pan, middle-drag, zoom-to-fit; the waveform re-details at every level
+- **Resolve-style toolbar** centered above the timeline: magnet snapping, zoom −/fit/+, persistent **blade mode** (click to mark, click again to cut), cut, restore, mark in/out
+- **Frame-step & I/O** — `←`/`→` one frame (`Shift` = 1 s), `I`/`O` trim the clip at the playhead
+- **Silence snapping** — cuts snap to VAD speech boundaries, threshold scales with zoom
+- **Hover thumbnails** — rest the cursor for a source-frame preview + timecode
+- **9 new reel grades** — Urban, Teal & orange, Cyberpunk, Golden hour, Dreamy, Y2K digicam, Faded film, Midnight, Sunset (+7 new base looks)
+- **Open recent** projects menu · **learned render estimate** in the button (`Create 3 shorts · ~4 min`)
+
+**0.8.0**
 
 - **Watch folder** — drop a video into a watched folder and it's queued automatically; tick **Auto-render** and it renders with your current settings, hands-off
 - **Smarter best moments** — speaker-labelled clips (👤, rename to *Marco* with the ✎ and it sticks in the project), semantic **near-duplicate skipping**, **seamless-loop** end snapping, and **chapters export** for YouTube/CSV
@@ -127,7 +140,7 @@ No installer, no account, no admin password. Each AI feature downloads its model
 - **Slow motion ×2/×4** — **RIFE** invents real in-between frames, or instant FFmpeg blend
 - **Face restoration:** GPEN-256/512, GFPGAN, CodeFormer — only on faces worth restoring (size + frontality gates), faded in over a few frames, source tones preserved
 - **Skin-tone fix** (exportable `.cube` LUT) · **Beauty** with neural face-parsing mask
-- **Colour:** 14 looks + **your own .cube LUTs** + auto WB + full manual **grade** (temp, tint, EV, contrast, sat, shadows, highlights, vignette)
+- **Colour:** 15 looks + **your own .cube LUTs** + auto WB + full manual **grade** (temp, tint, EV, contrast, sat, shadows, highlights, vignette)
 - **Lift dark shots** — SG-LLIE or URetinex neural low-light
 - **Blur background** — RVM fast or **MODNet** quality matting, guided-filter edges
 - **Enhance** — fast sharpen or Real-ESRGAN upscaling, **colour-locked** to the source so the palette can't drift or flicker

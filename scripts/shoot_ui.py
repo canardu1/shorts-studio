@@ -81,8 +81,8 @@ def band_frame(w, tl):
     org = tl.mapTo(w, QPointF(0, 0).toPoint())
     left = w.src_view.mapTo(w, QPointF(0, 0).toPoint()).x()
     right = (w.out_view.mapTo(w, QPointF(w.out_view.width(), 0).toPoint())).x()
-    top = max(0, org.y() - 8)
-    img = w.grab(QRect(left - 6, top, right - left + 12, 168)).toImage()
+    top = max(0, org.y() - 44)             # include the centred timeline toolbar
+    img = w.grab(QRect(left - 6, top, right - left + 12, 204)).toImage()
     img = img.convertToFormat(QImage.Format_RGBA8888)
     img = img.scaled(int(img.width() * 0.7), int(img.height() * 0.7),
                      Qt.KeepAspectRatio, Qt.SmoothTransformation)
