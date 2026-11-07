@@ -38,7 +38,7 @@ app = BUNDLE(
     icon=icon if os.path.exists(icon) else None,
     bundle_identifier="local.face-reframe.shorts-studio",
     info_plist={
-        "CFBundleShortVersionString": "0.8.0",
+        "CFBundleShortVersionString": "0.8.5",
         "NSHighResolutionCapable": True,
         "LSMinimumSystemVersion": "11.0",
     },

@@ -1,6 +1,6 @@
 [project]
 name = "face-reframe"
-version = "0.3.0"
+version = "0.8.5"
 description = "Shorts Studio: turn long horizontal videos into vertical shorts locally — face-following reframe, auto cuts, captions, cinematic audio, face restoration. Also DaVinci Resolve scripts."
 readme = "README.md"
 license = {text = "GPL-3.0-only"}
